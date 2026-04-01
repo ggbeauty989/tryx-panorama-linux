@@ -438,13 +438,24 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
     mlHeader->setStyleSheet("color: #fff;");
     layout->addWidget(mlHeader);
 
-    // File list (files on device)
+    // File list (files on device) - visual grid with thumbnails
     fileList_ = new QListWidget;
     fileList_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    fileList_->setMaximumHeight(150);
+    fileList_->setMinimumHeight(200);
+    fileList_->setMaximumHeight(320);
+    fileList_->setViewMode(QListView::IconMode);
+    fileList_->setIconSize(QSize(120, 80));
+    fileList_->setGridSize(QSize(140, 120));
+    fileList_->setResizeMode(QListView::Adjust);
+    fileList_->setWrapping(true);
+    fileList_->setWordWrap(true);
+    fileList_->setSpacing(6);
+    fileList_->setMovement(QListView::Static);
     fileList_->setStyleSheet(
-        "QListWidget { background: #2a2a3a; border: 1px solid #444; border-radius: 6px; color: #ddd; }"
-        "QListWidget::item:selected { background: #6c5ce7; }");
+        "QListWidget { background: #1e1e2e; border: 1px solid #444; border-radius: 6px; color: #ddd; padding: 6px; }"
+        "QListWidget::item { background: #2a2a3a; border: 1px solid #3a3a4a; border-radius: 4px; padding: 4px; }"
+        "QListWidget::item:selected { background: #6c5ce7; border: 1px solid #8b7cf7; }"
+        "QListWidget::item:hover { background: #3a3a4e; }");
     layout->addWidget(fileList_);
 
     // Context menu on file list (replaces buttons)
@@ -1013,7 +1024,9 @@ void PanoramaPage::onCustomSave() {
 
         QStringList media;
         for (auto *item : selected) {
-            media << item->text();
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+            media << filename;
         }
 
         QString ratio = ratioCombo_->currentText();
@@ -1036,16 +1049,40 @@ void PanoramaPage::onFileListContextMenu(const QPoint &pos) {
         auto *setRight = menu.addAction("Set to right side");
 
         connect(setLeft, &QAction::triggered, this, [this, item]() {
-            splitConfigWidget_->assignToLeft(item->text(), QPixmap());
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+            QPixmap thumb;
+            // Try to load cached thumbnail
+            QString thumbName = filename;
+            thumbName.replace(' ', '_');
+            thumbName += ".jpg";
+            QString thumbPath = THUMB_CACHE_DIR + "/" + thumbName;
+            if (QFileInfo::exists(thumbPath)) {
+                thumb = QPixmap(thumbPath);
+            }
+            splitConfigWidget_->assignToLeft(filename, thumb);
         });
         connect(setRight, &QAction::triggered, this, [this, item]() {
-            splitConfigWidget_->assignToRight(item->text(), QPixmap());
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+            QPixmap thumb;
+            // Try to load cached thumbnail
+            QString thumbName = filename;
+            thumbName.replace(' ', '_');
+            thumbName += ".jpg";
+            QString thumbPath = THUMB_CACHE_DIR + "/" + thumbName;
+            if (QFileInfo::exists(thumbPath)) {
+                thumb = QPixmap(thumbPath);
+            }
+            splitConfigWidget_->assignToRight(filename, thumb);
         });
     } else {
         auto *setDisplay = menu.addAction("Set as display");
         connect(setDisplay, &QAction::triggered, this, [this, item]() {
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
             QStringList media;
-            media << item->text();
+            media << filename;
             QString ratio = ratioCombo_->currentText();
             QString playMode = playModeCombo_->currentText();
             deviceMgr_->setScreenConfig(media, ratio, "Full Screen", playMode);
@@ -1056,10 +1093,12 @@ void PanoramaPage::onFileListContextMenu(const QPoint &pos) {
     menu.addSeparator();
     auto *deleteAction = menu.addAction("Delete");
     connect(deleteAction, &QAction::triggered, this, [this, item]() {
+        QString filename = item->data(Qt::UserRole).toString();
+        if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
         QStringList files;
-        files << item->text();
+        files << filename;
         auto reply = QMessageBox::question(this, "Delete",
-                                           QString("Delete %1?").arg(item->text()));
+                                           QString("Delete %1?").arg(filename));
         if (reply == QMessageBox::Yes) {
             deviceMgr_->deleteMedia(files);
         }
@@ -1077,7 +1116,9 @@ void PanoramaPage::onSetDisplayClicked() {
 
     QStringList media;
     for (auto *item : selected) {
-        media << item->text();
+        QString filename = item->data(Qt::UserRole).toString();
+        if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+        media << filename;
     }
 
     QString ratio = ratioCombo_ ? ratioCombo_->currentText() : "2:1";
@@ -1097,7 +1138,9 @@ void PanoramaPage::onDeleteClicked() {
 
     QStringList files;
     for (auto *item : selected) {
-        files << item->text();
+        QString filename = item->data(Qt::UserRole).toString();
+        if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+        files << filename;
     }
 
     auto reply = QMessageBox::question(this, "Delete",
@@ -1117,8 +1160,33 @@ void PanoramaPage::onBrightnessChanged(int value) {
 
 void PanoramaPage::onMediaListUpdated(const QStringList &files) {
     fileList_->clear();
+    QDir().mkpath(THUMB_CACHE_DIR);
+
     for (const auto &f : files) {
-        fileList_->addItem(f);
+        QString ext = QFileInfo(f).suffix().toUpper();
+        if (ext.isEmpty()) ext = "FILE";
+        QString displayText = f + "\n" + ext;
+
+        auto *item = new QListWidgetItem(displayText);
+        item->setData(Qt::UserRole, f);  // Store original filename
+        item->setTextAlignment(Qt::AlignCenter);
+
+        // Try to load cached thumbnail
+        QString thumbName = QString(f).replace(' ', '_') + ".jpg";
+        QString thumbPath = THUMB_CACHE_DIR + "/" + thumbName;
+        if (QFileInfo::exists(thumbPath)) {
+            QPixmap pix(thumbPath);
+            if (!pix.isNull()) {
+                item->setIcon(QIcon(pix.scaled(120, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+            }
+        } else {
+            // Dark placeholder icon
+            QPixmap placeholder(120, 80);
+            placeholder.fill(QColor("#2a2a3a"));
+            item->setIcon(QIcon(placeholder));
+        }
+
+        fileList_->addItem(item);
     }
     emit statusMessage(QString("Files on device: %1").arg(files.size()));
 }
