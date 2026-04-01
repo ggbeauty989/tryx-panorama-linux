@@ -31,7 +31,9 @@ public slots:
                          const QString &settingsAlign,
                          const QStringList &settingsBadges,
                          int filterOpacity,
-                         const QString &presetId = QString());
+                         const QString &presetId = QString(),
+                         const QStringList &sysinfoLabels2 = {},
+                         const QStringList &settingsBadges2 = {});
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -77,7 +79,9 @@ public slots:
                          const QString &settingsAlign = "Left",
                          const QStringList &settingsBadges = {},
                          int filterOpacity = 0,
-                         const QString &presetId = QString());
+                         const QString &presetId = QString(),
+                         const QStringList &sysinfoLabels2 = {},
+                         const QStringList &settingsBadges2 = {});
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -111,7 +115,9 @@ signals:
                              const QString &settingsAlign,
                              const QStringList &settingsBadges,
                              int filterOpacity,
-                             const QString &presetId = QString());
+                             const QString &presetId,
+                             const QStringList &sysinfoLabels2,
+                             const QStringList &settingsBadges2);
     void requestDeleteMedia(const QStringList &files);
     void requestUploadMedia(const QString &localPath);
     void requestRefreshMedia();

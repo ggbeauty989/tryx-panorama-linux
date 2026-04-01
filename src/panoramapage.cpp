@@ -11,6 +11,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QMenu>
 #include <QMessageBox>
 #include <QDir>
 #include <QFileInfo>
@@ -350,14 +351,33 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
     layout->setSpacing(12);
     layout->setContentsMargins(20, 16, 20, 16);
 
-    // Screen mode options
+    // Mode radio buttons
+    auto *radioLayout = new QHBoxLayout;
+    radioLayout->setSpacing(16);
+    fullScreenRadio_ = new QRadioButton("Full Screen");
+    splitScreenRadio_ = new QRadioButton("Screen Splitting");
+    fullScreenRadio_->setChecked(true);
+    fullScreenRadio_->setStyleSheet("color: #ccc;");
+    splitScreenRadio_->setStyleSheet("color: #ccc;");
+    radioLayout->addWidget(fullScreenRadio_);
+    radioLayout->addWidget(splitScreenRadio_);
+    radioLayout->addStretch();
+    layout->addLayout(radioLayout);
+
+    connect(fullScreenRadio_, &QRadioButton::toggled, this, &PanoramaPage::onScreenModeChanged);
+
+    // --- Full Screen controls (existing) ---
+    fullScreenControls_ = new QWidget;
+    auto *fsLayout = new QVBoxLayout(fullScreenControls_);
+    fsLayout->setContentsMargins(0, 0, 0, 0);
+    fsLayout->setSpacing(8);
+
     auto *modeLayout = new QHBoxLayout;
     modeLayout->setSpacing(12);
 
-    modeLayout->addWidget(new QLabel("Screen Mode:"));
     screenModeCombo_ = new QComboBox;
     screenModeCombo_->addItems({"Full Screen", "Screen Splitting"});
-    modeLayout->addWidget(screenModeCombo_);
+    screenModeCombo_->hide(); // hidden, mode is now via radio buttons
 
     modeLayout->addWidget(new QLabel("Play Mode:"));
     playModeCombo_ = new QComboBox;
@@ -370,7 +390,13 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
     modeLayout->addWidget(ratioCombo_);
 
     modeLayout->addStretch();
-    layout->addLayout(modeLayout);
+    fsLayout->addLayout(modeLayout);
+    layout->addWidget(fullScreenControls_);
+
+    // --- Screen Splitting controls ---
+    splitConfigWidget_ = new SplitConfigWidget;
+    splitConfigWidget_->hide();
+    layout->addWidget(splitConfigWidget_);
 
     // Drop zone
     dropZone_ = new QLabel("Upload a file\n(MP4, WEBM, GIF, JPG, PNG)");
@@ -421,27 +447,40 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
         "QListWidget::item:selected { background: #6c5ce7; }");
     layout->addWidget(fileList_);
 
-    // File action buttons
-    auto *fileBtnLayout = new QHBoxLayout;
-    setDisplayBtn_ = new QPushButton("Set Display");
-    deleteBtn_ = new QPushButton("Delete");
-    refreshBtn_ = new QPushButton("Refresh");
+    // Context menu on file list (replaces buttons)
+    fileList_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(fileList_, &QListWidget::customContextMenuRequested,
+            this, &PanoramaPage::onFileListContextMenu);
 
-    for (auto *btn : {setDisplayBtn_, deleteBtn_, refreshBtn_}) {
-        btn->setStyleSheet(
-            "QPushButton { background: #3d3d4d; color: #ddd; border: none; border-radius: 4px; padding: 6px 12px; }"
-            "QPushButton:hover { background: #4d4d5d; }");
-    }
+    // Hidden buttons for backward compat (not shown in UI)
+    setDisplayBtn_ = new QPushButton;
+    setDisplayBtn_->hide();
+    deleteBtn_ = new QPushButton;
+    deleteBtn_->hide();
+    refreshBtn_ = new QPushButton;
+    refreshBtn_->hide();
 
-    fileBtnLayout->addWidget(setDisplayBtn_);
-    fileBtnLayout->addWidget(deleteBtn_);
-    fileBtnLayout->addWidget(refreshBtn_);
-    fileBtnLayout->addStretch();
-    layout->addLayout(fileBtnLayout);
+    // Refresh + Save row
+    auto *actionLayout = new QHBoxLayout;
+    auto *refreshBtn = new QPushButton("Refresh");
+    refreshBtn->setStyleSheet(
+        "QPushButton { background: #3d3d4d; color: #ddd; border: none; border-radius: 4px; padding: 6px 12px; }"
+        "QPushButton:hover { background: #4d4d5d; }");
+    connect(refreshBtn, &QPushButton::clicked, this, &PanoramaPage::onRefreshClicked);
+    actionLayout->addWidget(refreshBtn);
 
-    connect(setDisplayBtn_, &QPushButton::clicked, this, &PanoramaPage::onSetDisplayClicked);
-    connect(deleteBtn_, &QPushButton::clicked, this, &PanoramaPage::onDeleteClicked);
-    connect(refreshBtn_, &QPushButton::clicked, this, &PanoramaPage::onRefreshClicked);
+    actionLayout->addStretch();
+
+    customSaveBtn_ = new QPushButton("Save");
+    customSaveBtn_->setMinimumHeight(36);
+    customSaveBtn_->setMinimumWidth(120);
+    customSaveBtn_->setStyleSheet(
+        "QPushButton { background: #00b894; color: white; border: none; border-radius: 4px; padding: 8px 24px; font-weight: bold; font-size: 13px; }"
+        "QPushButton:hover { background: #00a381; }");
+    connect(customSaveBtn_, &QPushButton::clicked, this, &PanoramaPage::onCustomSave);
+    actionLayout->addWidget(customSaveBtn_);
+
+    layout->addLayout(actionLayout);
 
     layout->addStretch();
 
@@ -662,8 +701,8 @@ void PanoramaPage::applyScreenConfig() {
         }
     }
 
-    fprintf(stderr, "[panorama] save: preset='%s' media=%d metrics=%d\n",
-            presetId.toStdString().c_str(), media.size(), labels.size());
+    fprintf(stderr, "[panorama] save: preset='%s' media=%lld metrics=%lld\n",
+            presetId.toStdString().c_str(), (long long)media.size(), (long long)labels.size());
 
     deviceMgr_->setScreenConfig(
         media,
@@ -915,6 +954,118 @@ void PanoramaPage::onUploadBuiltinClicked() {
 
     progressBar_->setVisible(true);
     deviceMgr_->uploadMedia(selectedPresetTile_->filePath());
+}
+
+void PanoramaPage::onScreenModeChanged() {
+    bool isSplit = splitScreenRadio_->isChecked();
+    fullScreenControls_->setVisible(!isSplit);
+    splitConfigWidget_->setVisible(isSplit);
+}
+
+void PanoramaPage::onCustomSave() {
+    bool isSplit = splitScreenRadio_->isChecked();
+
+    if (isSplit) {
+        // Screen Splitting mode
+        QStringList leftMedia = splitConfigWidget_->leftMedia();
+        QStringList rightMedia = splitConfigWidget_->rightMedia();
+
+        if (leftMedia.isEmpty() || rightMedia.isEmpty()) {
+            emit statusMessage("Assign media to both left and right sides");
+            return;
+        }
+
+        QStringList allMedia;
+        allMedia << leftMedia << rightMedia;
+
+        QStringList leftMetrics = splitConfigWidget_->leftMetrics();
+        QStringList rightMetrics = splitConfigWidget_->rightMetrics();
+        QString playMode = splitConfigWidget_->playMode();
+
+        fprintf(stderr, "[panorama] split save: left=%lld right=%lld leftMetrics=%lld rightMetrics=%lld\n",
+                (long long)leftMedia.size(), (long long)rightMedia.size(),
+                (long long)leftMetrics.size(), (long long)rightMetrics.size());
+
+        deviceMgr_->setScreenConfig(
+            allMedia,
+            "2:1",
+            "Screen Splitting",
+            playMode,
+            leftMetrics,
+            "Top",
+            "#FFFFFF",
+            "Left",
+            {},    // badges left
+            0,
+            QString(),  // no preset
+            rightMetrics,
+            {}     // badges right
+        );
+
+        emit statusMessage("Screen Splitting configuration applied");
+    } else {
+        // Full Screen mode - use selected files from list
+        auto selected = fileList_->selectedItems();
+        if (selected.isEmpty()) {
+            emit statusMessage("Select files to display");
+            return;
+        }
+
+        QStringList media;
+        for (auto *item : selected) {
+            media << item->text();
+        }
+
+        QString ratio = ratioCombo_->currentText();
+        QString playMode = playModeCombo_->currentText();
+
+        deviceMgr_->setScreenConfig(media, ratio, "Full Screen", playMode);
+        emit statusMessage("Full Screen configuration applied");
+    }
+}
+
+void PanoramaPage::onFileListContextMenu(const QPoint &pos) {
+    auto *item = fileList_->itemAt(pos);
+    if (!item) return;
+
+    QMenu menu(this);
+    bool isSplit = splitScreenRadio_->isChecked();
+
+    if (isSplit) {
+        auto *setLeft = menu.addAction("Set to left side");
+        auto *setRight = menu.addAction("Set to right side");
+
+        connect(setLeft, &QAction::triggered, this, [this, item]() {
+            splitConfigWidget_->assignToLeft(item->text(), QPixmap());
+        });
+        connect(setRight, &QAction::triggered, this, [this, item]() {
+            splitConfigWidget_->assignToRight(item->text(), QPixmap());
+        });
+    } else {
+        auto *setDisplay = menu.addAction("Set as display");
+        connect(setDisplay, &QAction::triggered, this, [this, item]() {
+            QStringList media;
+            media << item->text();
+            QString ratio = ratioCombo_->currentText();
+            QString playMode = playModeCombo_->currentText();
+            deviceMgr_->setScreenConfig(media, ratio, "Full Screen", playMode);
+            emit statusMessage("Screen config applied");
+        });
+    }
+
+    menu.addSeparator();
+    auto *deleteAction = menu.addAction("Delete");
+    connect(deleteAction, &QAction::triggered, this, [this, item]() {
+        QStringList files;
+        files << item->text();
+        auto reply = QMessageBox::question(this, "Delete",
+                                           QString("Delete %1?").arg(item->text()));
+        if (reply == QMessageBox::Yes) {
+            deviceMgr_->deleteMedia(files);
+        }
+    });
+
+    menu.exec(fileList_->mapToGlobal(pos));
 }
 
 void PanoramaPage::onSetDisplayClicked() {

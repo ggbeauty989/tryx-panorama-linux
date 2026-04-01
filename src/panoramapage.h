@@ -19,11 +19,13 @@
 #include <QMap>
 #include <QSettings>
 
+#include <QRadioButton>
 #include <QMediaPlayer>
 #include <QVideoSink>
 #include <QVideoFrame>
 #include <QAudioOutput>
 #include "systemmonitor.h"
+#include "splitconfig.h"
 
 class DeviceManager;
 
@@ -65,6 +67,9 @@ private slots:
     void onMediaUploaded(const QString &filename);
     void onMediaDeleted();
     void onUploadStatus(const QString &status);
+    void onScreenModeChanged();
+    void onCustomSave();
+    void onFileListContextMenu(const QPoint &pos);
 
     // Display settings
     void onBrightnessChanged(int value);
@@ -141,6 +146,13 @@ private:
     QPushButton *refreshBtn_;
     QLabel *dropZone_;
     QProgressBar *progressBar_;
+
+    // Customization tab - Screen Splitting
+    QRadioButton *fullScreenRadio_;
+    QRadioButton *splitScreenRadio_;
+    QWidget *fullScreenControls_;
+    SplitConfigWidget *splitConfigWidget_;
+    QPushButton *customSaveBtn_;
 
     // Customization tab - user media grid
     QScrollArea *customScrollArea_;

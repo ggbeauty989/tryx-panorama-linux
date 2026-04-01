@@ -88,7 +88,9 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
                                    const QString &settingsAlign,
                                    const QStringList &settingsBadges,
                                    int filterOpacity,
-                                   const QString &presetId) {
+                                   const QString &presetId,
+                                   const QStringList &sysinfoLabels2,
+                                   const QStringList &settingsBadges2) {
     if (!device_ || !device_->is_connected()) {
         emit error("Устройство не подключено");
         return;
@@ -115,6 +117,20 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
     config.settings.filter_opacity = filterOpacity;
     for (const auto &badge : settingsBadges) {
         config.settings.badges.push_back(badge.toStdString());
+    }
+
+    // Screen Splitting: populate second set of settings and sysinfo
+    if (screenMode == "Screen Splitting") {
+        for (const auto &label : sysinfoLabels2) {
+            config.sysinfo_display2.push_back(label.toStdString());
+        }
+        config.settings2.position = settingsPosition.toStdString();
+        config.settings2.color = settingsColor.toStdString();
+        config.settings2.align = settingsAlign.toStdString();
+        config.settings2.filter_opacity = filterOpacity;
+        for (const auto &badge : settingsBadges2) {
+            config.settings2.badges.push_back(badge.toStdString());
+        }
     }
 
     auto resp = device_->set_screen_config(config);
@@ -414,10 +430,13 @@ void DeviceManager::setScreenConfig(const QStringList &media, const QString &rat
                                     const QString &settingsAlign,
                                     const QStringList &settingsBadges,
                                     int filterOpacity,
-                                    const QString &presetId) {
+                                    const QString &presetId,
+                                    const QStringList &sysinfoLabels2,
+                                    const QStringList &settingsBadges2) {
     emit requestScreenConfig(media, ratio, screenMode, playMode,
                              sysinfoLabels, settingsPosition, settingsColor,
-                             settingsAlign, settingsBadges, filterOpacity, presetId);
+                             settingsAlign, settingsBadges, filterOpacity,
+                             presetId, sysinfoLabels2, settingsBadges2);
 }
 
 void DeviceManager::sendSysinfo(const QStringList &labels, const QStringList &values,

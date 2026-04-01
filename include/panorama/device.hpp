@@ -34,6 +34,10 @@ struct ScreenConfig {
   std::string play_mode = "Single";
   std::vector<std::string> sysinfo_display; // max 3 labels
   DisplaySettings settings;
+
+  // For Screen Splitting mode - second set of settings and sysinfo
+  DisplaySettings settings2;
+  std::vector<std::string> sysinfo_display2;
 };
 
 struct SysinfoData {
@@ -69,6 +73,7 @@ class Device {
   std::optional<Response> set_temperature_unit(const std::string& unit = "Celsius");
   std::optional<Response> send_config(const std::string& cpu_name, const std::string& gpu_name, const std::string& temp_unit = "Celsius");
   std::optional<Response> set_brightness(int value);
+  std::optional<Response> set_waterfall_mode(bool enable);
   std::optional<Response> delete_media(const std::vector<std::string>& files);
   std::optional<Response> send_sysinfo(const std::vector<SysinfoData>& data);
 

@@ -30,9 +30,47 @@ std::string Adb::escape_shell_arg(const std::string& input) {
   return escaped;
 }
 
+std::string Adb::find_tryx_serial() {
+  // Find TRYX device serial among connected ADB devices
+  FILE* proc = popen("adb devices 2>&1", "r");
+  if (!proc) return {};
+  char chunk[2048];
+  std::string output;
+  while (fgets(chunk, sizeof(chunk), proc))
+    output += chunk;
+  pclose(proc);
+
+  std::string::size_type pos = 0;
+  while (pos < output.size()) {
+    auto eol = output.find('\n', pos);
+    if (eol == std::string::npos) eol = output.size();
+    std::string row = output.substr(pos, eol - pos);
+    auto tab = row.find('\t');
+    if (tab != std::string::npos) {
+      std::string serial = row.substr(0, tab);
+      // TRYX devices have "TRYX" in serial number
+      if (serial.find("TRYX") != std::string::npos) {
+        return serial;
+      }
+    }
+    pos = eol + 1;
+  }
+  return {};
+}
+
 std::optional<std::string> Adb::run_command(
     const std::vector<std::string>& args) {
   std::string commandline = "adb";
+
+  // Auto-select TRYX device if multiple devices connected
+  static std::string cached_serial;
+  if (cached_serial.empty()) {
+    cached_serial = find_tryx_serial();
+  }
+  if (!cached_serial.empty() && (args.empty() || args[0] != "devices")) {
+    commandline += " -s " + escape_shell_arg(cached_serial);
+  }
+
   for (const auto& token : args) {
     commandline += ' ';
     commandline += escape_shell_arg(token);

@@ -1,0 +1,226 @@
+#include "splitconfig.h"
+
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFont>
+
+static const QStringList METRIC_LABELS = {
+    "CPU Temperature", "CPU Frequency", "CPU Usage", "CPU Voltage",
+    "GPU Temperature", "GPU Frequency", "GPU Usage", "GPU Voltage",
+    "Hard Disk Temperature", "Motherboard Temperature",
+    "Memory Frequency", "Memory Utilization", "Date&Time"
+};
+
+SplitConfigWidget::SplitConfigWidget(QWidget *parent)
+    : QWidget(parent) {
+    setupUi();
+}
+
+void SplitConfigWidget::setupUi() {
+    auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(12);
+
+    // Preview frames side by side
+    auto *previewLayout = new QHBoxLayout;
+    previewLayout->setSpacing(12);
+
+    // Left preview
+    auto *leftBox = new QVBoxLayout;
+    auto *leftLabel = new QLabel("Left");
+    leftLabel->setAlignment(Qt::AlignCenter);
+    leftLabel->setStyleSheet("color: #ccc; font-weight: bold; font-size: 11px;");
+    leftBox->addWidget(leftLabel);
+
+    leftPreview_ = new QLabel;
+    leftPreview_->setFixedHeight(150);
+    leftPreview_->setMinimumWidth(200);
+    leftPreview_->setAlignment(Qt::AlignCenter);
+    leftPreview_->setStyleSheet(
+        "QLabel { background: #2a2a3a; border: 2px dashed #555; border-radius: 8px; color: #666; }");
+    leftPreview_->setText("No media assigned");
+    leftBox->addWidget(leftPreview_);
+
+    leftFileLabel_ = new QLabel;
+    leftFileLabel_->setAlignment(Qt::AlignCenter);
+    leftFileLabel_->setStyleSheet("color: #888; font-size: 10px;");
+    leftBox->addWidget(leftFileLabel_);
+
+    previewLayout->addLayout(leftBox, 1);
+
+    // Right preview
+    auto *rightBox = new QVBoxLayout;
+    auto *rightLabel = new QLabel("Right");
+    rightLabel->setAlignment(Qt::AlignCenter);
+    rightLabel->setStyleSheet("color: #ccc; font-weight: bold; font-size: 11px;");
+    rightBox->addWidget(rightLabel);
+
+    rightPreview_ = new QLabel;
+    rightPreview_->setFixedHeight(150);
+    rightPreview_->setMinimumWidth(200);
+    rightPreview_->setAlignment(Qt::AlignCenter);
+    rightPreview_->setStyleSheet(
+        "QLabel { background: #2a2a3a; border: 2px dashed #555; border-radius: 8px; color: #666; }");
+    rightPreview_->setText("No media assigned");
+    rightBox->addWidget(rightPreview_);
+
+    rightFileLabel_ = new QLabel;
+    rightFileLabel_->setAlignment(Qt::AlignCenter);
+    rightFileLabel_->setStyleSheet("color: #888; font-size: 10px;");
+    rightBox->addWidget(rightFileLabel_);
+
+    previewLayout->addLayout(rightBox, 1);
+    mainLayout->addLayout(previewLayout);
+
+    // Settings row
+    auto *settingsLayout = new QHBoxLayout;
+    settingsLayout->setSpacing(12);
+
+    settingsLayout->addWidget(new QLabel("Play Mode:"));
+    playModeCombo_ = new QComboBox;
+    playModeCombo_->addItems({"Single", "Shuffle", "Loop"});
+    settingsLayout->addWidget(playModeCombo_);
+
+    // Left metrics button
+    settingsLayout->addWidget(new QLabel("System info left:"));
+    leftMetricsBtn_ = new QToolButton;
+    leftMetricsBtn_->setText("0");
+    leftMetricsBtn_->setPopupMode(QToolButton::InstantPopup);
+    leftMetricsBtn_->setStyleSheet(
+        "QToolButton { background: #3d3d4d; color: #ddd; border: 1px solid #555; "
+        "border-radius: 4px; padding: 4px 12px; min-width: 40px; }"
+        "QToolButton:hover { background: #4d4d5d; }"
+        "QToolButton::menu-indicator { image: none; }");
+
+    leftMetricsMenu_ = new QMenu(this);
+    for (const auto &label : METRIC_LABELS) {
+        auto *action = leftMetricsMenu_->addAction(label);
+        action->setCheckable(true);
+        leftMetricActions_.append(action);
+        connect(action, &QAction::toggled, this, [this](bool) {
+            // Enforce max 3
+            int count = 0;
+            for (auto *a : leftMetricActions_) {
+                if (a->isChecked()) count++;
+            }
+            if (count > 3) {
+                // Uncheck the one that was just toggled
+                auto *sender = qobject_cast<QAction *>(QObject::sender());
+                if (sender) sender->setChecked(false);
+                return;
+            }
+            rebuildMetricsButton(leftMetricsBtn_, leftMetricActions_);
+        });
+    }
+    leftMetricsBtn_->setMenu(leftMetricsMenu_);
+    settingsLayout->addWidget(leftMetricsBtn_);
+
+    // Right metrics button
+    settingsLayout->addWidget(new QLabel("System info right:"));
+    rightMetricsBtn_ = new QToolButton;
+    rightMetricsBtn_->setText("0");
+    rightMetricsBtn_->setPopupMode(QToolButton::InstantPopup);
+    rightMetricsBtn_->setStyleSheet(
+        "QToolButton { background: #3d3d4d; color: #ddd; border: 1px solid #555; "
+        "border-radius: 4px; padding: 4px 12px; min-width: 40px; }"
+        "QToolButton:hover { background: #4d4d5d; }"
+        "QToolButton::menu-indicator { image: none; }");
+
+    rightMetricsMenu_ = new QMenu(this);
+    for (const auto &label : METRIC_LABELS) {
+        auto *action = rightMetricsMenu_->addAction(label);
+        action->setCheckable(true);
+        rightMetricActions_.append(action);
+        connect(action, &QAction::toggled, this, [this](bool) {
+            int count = 0;
+            for (auto *a : rightMetricActions_) {
+                if (a->isChecked()) count++;
+            }
+            if (count > 3) {
+                auto *sender = qobject_cast<QAction *>(QObject::sender());
+                if (sender) sender->setChecked(false);
+                return;
+            }
+            rebuildMetricsButton(rightMetricsBtn_, rightMetricActions_);
+        });
+    }
+    rightMetricsBtn_->setMenu(rightMetricsMenu_);
+    settingsLayout->addWidget(rightMetricsBtn_);
+
+    settingsLayout->addStretch();
+    mainLayout->addLayout(settingsLayout);
+}
+
+void SplitConfigWidget::rebuildMetricsButton(QToolButton *btn, const QList<QAction *> &actions) {
+    int count = 0;
+    for (auto *a : actions) {
+        if (a->isChecked()) count++;
+    }
+    btn->setText(QString::number(count));
+}
+
+QStringList SplitConfigWidget::leftMedia() const {
+    QStringList list;
+    if (!leftFilename_.isEmpty())
+        list << leftFilename_;
+    return list;
+}
+
+QStringList SplitConfigWidget::rightMedia() const {
+    QStringList list;
+    if (!rightFilename_.isEmpty())
+        list << rightFilename_;
+    return list;
+}
+
+QStringList SplitConfigWidget::leftMetrics() const {
+    QStringList list;
+    for (auto *a : leftMetricActions_) {
+        if (a->isChecked())
+            list << a->text();
+    }
+    return list;
+}
+
+QStringList SplitConfigWidget::rightMetrics() const {
+    QStringList list;
+    for (auto *a : rightMetricActions_) {
+        if (a->isChecked())
+            list << a->text();
+    }
+    return list;
+}
+
+QString SplitConfigWidget::playMode() const {
+    return playModeCombo_->currentText();
+}
+
+void SplitConfigWidget::assignToLeft(const QString &filename, const QPixmap &thumb) {
+    leftFilename_ = filename;
+    if (!thumb.isNull()) {
+        leftPreview_->setPixmap(thumb.scaled(leftPreview_->size(),
+                                             Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        leftPreview_->setStyleSheet(
+            "QLabel { background: #2a2a3a; border: 2px solid #6c5ce7; border-radius: 8px; }");
+    } else {
+        leftPreview_->setText(filename);
+        leftPreview_->setStyleSheet(
+            "QLabel { background: #2a2a3a; border: 2px solid #6c5ce7; border-radius: 8px; color: #ccc; }");
+    }
+    leftFileLabel_->setText(filename);
+}
+
+void SplitConfigWidget::assignToRight(const QString &filename, const QPixmap &thumb) {
+    rightFilename_ = filename;
+    if (!thumb.isNull()) {
+        rightPreview_->setPixmap(thumb.scaled(rightPreview_->size(),
+                                              Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        rightPreview_->setStyleSheet(
+            "QLabel { background: #2a2a3a; border: 2px solid #6c5ce7; border-radius: 8px; }");
+    } else {
+        rightPreview_->setText(filename);
+        rightPreview_->setStyleSheet(
+            "QLabel { background: #2a2a3a; border: 2px solid #6c5ce7; border-radius: 8px; color: #ccc; }");
+    }
+    rightFileLabel_->setText(filename);
+}

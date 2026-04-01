@@ -29,7 +29,8 @@ HEADERS += \
     src/displaypage.h \
     src/settingspage.h \
     src/traymanager.h \
-    src/mainwindow.h
+    src/mainwindow.h \
+    src/splitconfig.h
 
 SOURCES += \
     src/main.cpp \
@@ -40,6 +41,7 @@ SOURCES += \
     src/displaypage.cpp \
     src/settingspage.cpp \
     src/traymanager.cpp \
-    src/mainwindow.cpp
+    src/mainwindow.cpp \
+    src/splitconfig.cpp
 
 RESOURCES += resources/resources.qrc
