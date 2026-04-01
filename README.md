@@ -1,9 +1,13 @@
 # TRYX Panorama SE 360 - Linux GUI Manager
 
 Qt6 GUI application for managing the TRYX Panorama SE 360 AIO cooler display on Linux.
-<div align="center"> 
+
+<div align="center">
+
 https://github.com/user-attachments/assets/f9baac04-fe28-4aeb-a8ea-eb2af37ff6cb
-+</div>
+
+</div>
+
 ## What was done
 
 - Unpacking KANALI (official Windows app) resources to extract built-in media library (15 videos)
