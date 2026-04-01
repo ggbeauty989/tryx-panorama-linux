@@ -21,9 +21,7 @@ public:
     QStringList leftMetrics() const;
     QStringList rightMetrics() const;
     QString playMode() const;
-    int rotation() const;
-    int initialRotation() const { return initialRotation_; }
-    void setInitialRotation(int degrees);
+    QString metricsPosition() const;
 
     void assignToLeft(const QString &filename, const QPixmap &thumb);
     void assignToRight(const QString &filename, const QPixmap &thumb);
@@ -40,7 +38,7 @@ private:
 
     // Settings
     QComboBox *playModeCombo_;
-    QComboBox *rotationCombo_;
+    QComboBox *metricsPositionCombo_;
     QToolButton *leftMetricsBtn_;
     QToolButton *rightMetricsBtn_;
     QMenu *leftMetricsMenu_;
@@ -51,5 +49,4 @@ private:
     // Media assignments
     QString leftFilename_;
     QString rightFilename_;
-    int initialRotation_ = 270;
 };

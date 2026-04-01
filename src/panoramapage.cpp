@@ -1013,28 +1013,9 @@ void PanoramaPage::onCustomSave() {
             {}     // badges right
         );
 
-        // Rotation: only send if changed, warn about display restart
-        int rotation = splitConfigWidget_->rotation();
-        int initial = splitConfigWidget_->initialRotation();
-        if (rotation != initial) {
-            auto reply = QMessageBox::question(this, "Display Rotation",
-                QString("Display rotation changed from %1 to %2.\n"
-                        "Display will restart to apply.\n\nContinue?")
-                    .arg(initial).arg(rotation),
-                QMessageBox::Yes | QMessageBox::No);
-            if (reply == QMessageBox::Yes) {
-                fprintf(stderr, "[rotation] %d -> %d, sending rotate + reboot\n", initial, rotation);
-                deviceMgr_->setRotation(rotation);
-                // Delay reboot to let rotate command process
-                QTimer::singleShot(1000, this, [this]() {
-                    fprintf(stderr, "[reboot] sending\n");
-                    deviceMgr_->rebootDevice();
-                });
-                splitConfigWidget_->setInitialRotation(rotation);
-                emit statusMessage("Rotation applied, display restarting...");
-            } else {
-                splitConfigWidget_->setInitialRotation(initial);
-            }
+        // Start metrics sending if any metrics selected
+        if (!leftMetrics.isEmpty() || !rightMetrics.isEmpty()) {
+            QTimer::singleShot(2000, this, [this]() { startMetrics(); });
         }
 
         emit statusMessage("Screen Splitting configuration applied");

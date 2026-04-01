@@ -16,19 +16,6 @@ static const QStringList METRIC_LABELS = {
 SplitConfigWidget::SplitConfigWidget(QWidget *parent)
     : QWidget(parent) {
     setupUi();
-
-    // Read current rotation from device
-    FILE *proc = popen("adb -s $(adb devices 2>/dev/null | grep TRYX | cut -f1) shell getprop persist.vendor.orientation 2>/dev/null", "r");
-    if (proc) {
-        char buf[32];
-        if (fgets(buf, sizeof(buf), proc)) {
-            int deg = atoi(buf);
-            if (deg == 0 || deg == 90 || deg == 180 || deg == 270) {
-                setInitialRotation(deg);
-            }
-        }
-        pclose(proc);
-    }
 }
 
 void SplitConfigWidget::setupUi() {
@@ -98,11 +85,10 @@ void SplitConfigWidget::setupUi() {
     playModeCombo_->addItems({"Single", "Shuffle", "Loop"});
     settingsLayout->addWidget(playModeCombo_);
 
-    settingsLayout->addWidget(new QLabel("Rotation:"));
-    rotationCombo_ = new QComboBox;
-    rotationCombo_->addItems({"0", "90", "180", "270"});
-    rotationCombo_->setCurrentText("270");
-    settingsLayout->addWidget(rotationCombo_);
+    settingsLayout->addWidget(new QLabel("Metrics Position:"));
+    metricsPositionCombo_ = new QComboBox;
+    metricsPositionCombo_->addItems({"Top", "Bottom"});
+    settingsLayout->addWidget(metricsPositionCombo_);
 
     // Left metrics button
     leftMetricsBtn_ = new QToolButton;
@@ -220,14 +206,8 @@ QString SplitConfigWidget::playMode() const {
     return playModeCombo_->currentText();
 }
 
-int SplitConfigWidget::rotation() const {
-    return rotationCombo_->currentText().toInt();
-}
-
-void SplitConfigWidget::setInitialRotation(int degrees) {
-    initialRotation_ = degrees;
-    int idx = rotationCombo_->findText(QString::number(degrees));
-    if (idx >= 0) rotationCombo_->setCurrentIndex(idx);
+QString SplitConfigWidget::metricsPosition() const {
+    return metricsPositionCombo_->currentText();
 }
 
 void SplitConfigWidget::assignToLeft(const QString &filename, const QPixmap &thumb) {
