@@ -22,6 +22,8 @@ public:
     QStringList rightMetrics() const;
     QString playMode() const;
     int rotation() const;
+    int initialRotation() const { return initialRotation_; }
+    void setInitialRotation(int degrees);
 
     void assignToLeft(const QString &filename, const QPixmap &thumb);
     void assignToRight(const QString &filename, const QPixmap &thumb);
@@ -49,4 +51,5 @@ private:
     // Media assignments
     QString leftFilename_;
     QString rightFilename_;
+    int initialRotation_ = 270;
 };

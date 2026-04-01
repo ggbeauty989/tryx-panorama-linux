@@ -35,6 +35,7 @@ public slots:
                          const QStringList &sysinfoLabels2 = {},
                          const QStringList &settingsBadges2 = {});
     void setRotation(int degrees);
+    void rebootDevice();
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -84,6 +85,7 @@ public slots:
                          const QStringList &sysinfoLabels2 = {},
                          const QStringList &settingsBadges2 = {});
     void setRotation(int degrees);
+    void rebootDevice();
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -121,6 +123,7 @@ signals:
                              const QStringList &sysinfoLabels2,
                              const QStringList &settingsBadges2);
     void requestRotation(int degrees);
+    void requestReboot();
     void requestDeleteMedia(const QStringList &files);
     void requestUploadMedia(const QString &localPath);
     void requestRefreshMedia();

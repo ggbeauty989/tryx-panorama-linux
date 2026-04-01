@@ -359,6 +359,11 @@ void DeviceWorker::setRotation(int degrees) {
     device_->set_rotation(degrees);
 }
 
+void DeviceWorker::rebootDevice() {
+    // ADB reboot works, POST reboot doesn't
+    std::system("adb -s $(adb devices 2>/dev/null | grep TRYX | cut -f1) reboot 2>/dev/null");
+}
+
 // --- DeviceManager ---
 
 DeviceManager::DeviceManager(QObject *parent)
@@ -400,6 +405,7 @@ DeviceManager::DeviceManager(QObject *parent)
     connect(this, &DeviceManager::requestRefreshMedia, worker_, &DeviceWorker::refreshMediaList);
     connect(this, &DeviceManager::requestKeepalive, worker_, &DeviceWorker::sendKeepalive);
     connect(this, &DeviceManager::requestRotation, worker_, &DeviceWorker::setRotation);
+    connect(this, &DeviceManager::requestReboot, worker_, &DeviceWorker::rebootDevice);
     connect(this, &DeviceManager::requestSysinfo, worker_, &DeviceWorker::sendSysinfo);
     connect(worker_, &DeviceWorker::sysinfoSent, this, &DeviceManager::sysinfoSent);
 
@@ -454,6 +460,10 @@ void DeviceManager::sendSysinfo(const QStringList &labels, const QStringList &va
 
 void DeviceManager::setRotation(int degrees) {
     emit requestRotation(degrees);
+}
+
+void DeviceManager::rebootDevice() {
+    emit requestReboot();
 }
 
 void DeviceManager::deleteMedia(const QStringList &files) {

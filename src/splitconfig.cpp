@@ -1,5 +1,7 @@
 #include "splitconfig.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFont>
@@ -14,6 +16,19 @@ static const QStringList METRIC_LABELS = {
 SplitConfigWidget::SplitConfigWidget(QWidget *parent)
     : QWidget(parent) {
     setupUi();
+
+    // Read current rotation from device
+    FILE *proc = popen("adb -s $(adb devices 2>/dev/null | grep TRYX | cut -f1) shell getprop persist.vendor.orientation 2>/dev/null", "r");
+    if (proc) {
+        char buf[32];
+        if (fgets(buf, sizeof(buf), proc)) {
+            int deg = atoi(buf);
+            if (deg == 0 || deg == 90 || deg == 180 || deg == 270) {
+                setInitialRotation(deg);
+            }
+        }
+        pclose(proc);
+    }
 }
 
 void SplitConfigWidget::setupUi() {
@@ -207,6 +222,12 @@ QString SplitConfigWidget::playMode() const {
 
 int SplitConfigWidget::rotation() const {
     return rotationCombo_->currentText().toInt();
+}
+
+void SplitConfigWidget::setInitialRotation(int degrees) {
+    initialRotation_ = degrees;
+    int idx = rotationCombo_->findText(QString::number(degrees));
+    if (idx >= 0) rotationCombo_->setCurrentIndex(idx);
 }
 
 void SplitConfigWidget::assignToLeft(const QString &filename, const QPixmap &thumb) {

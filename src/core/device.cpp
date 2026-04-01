@@ -547,6 +547,10 @@ std::optional<Response> Device::set_rotation(int degrees) {
   return send_command("POST", "rotate", content);
 }
 
+std::optional<Response> Device::reboot() {
+  return send_command("POST", "reboot", "");
+}
+
 std::optional<Response> Device::set_brightness(int value) {
   picojson::object obj;
   obj["value"] = picojson::value(static_cast<double>(value));
