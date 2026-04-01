@@ -6,7 +6,7 @@
 
 #include "protocol.hpp"
 
-namespace reed {
+namespace panorama {
 
 struct DeviceInfo {
   std::string product_id;
@@ -81,4 +81,4 @@ class Device {
   std::vector<uint8_t> read_response(int timeout_ms = 1000);
 };
 
-}  // namespace reed
+}  // namespace panorama

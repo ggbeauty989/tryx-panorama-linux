@@ -95,8 +95,8 @@ bool HudRenderer::compositeVideo(const QString &sourceVideo,
 }
 
 QImage HudRenderer::extractVideoFrame(const QString &videoPath) {
-    QString tmpFrame = "/tmp/reed-tpse/preview_frame.png";
-    QDir().mkpath("/tmp/reed-tpse");
+    QString tmpFrame = "/tmp/tryx-panorama/preview_frame.png";
+    QDir().mkpath("/tmp/tryx-panorama");
 
     QProcess proc;
     proc.start("ffmpeg", {"-y", "-i", videoPath,

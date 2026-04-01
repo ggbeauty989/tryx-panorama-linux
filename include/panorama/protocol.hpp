@@ -7,11 +7,13 @@
 
 #include "picojson.h"
 
-namespace reed {
+namespace panorama {
 
+// Sentinel bytes used to delimit and protect frame boundaries
 constexpr uint8_t FRAME_MARKER = 0x5A;
 constexpr uint8_t ESCAPE_MARKER = 0x5B;
 
+// Holds the decoded contents of a protocol response
 struct Response {
   std::string raw;
   std::string body;
@@ -20,23 +22,23 @@ struct Response {
   std::string status;
 };
 
-// Calculate CRC (sum of all bytes & 0xFF)
+// Produce a single-byte checksum by summing all elements modulo 256
 uint8_t calculate_crc(const std::vector<uint8_t>& data);
 
-// Escape special bytes in data
+// Replace occurrences of sentinel bytes with two-byte escape sequences
 std::vector<uint8_t> escape_data(const std::vector<uint8_t>& data);
 
-// Unescape special bytes in data
+// Reverse the escape encoding, restoring original byte values
 std::vector<uint8_t> unescape_data(const std::vector<uint8_t>& data);
 
-// Build a complete protocol frame
+// Assemble a framed protocol packet ready for transmission
 std::vector<uint8_t> build_frame(const std::string& request_state,
                                  const std::string& cmd_type,
                                  const std::string& content = "",
                                  const std::string& version = "1",
                                  int ack_number = 0);
 
-// Parse a response frame
+// Decode a raw frame into a structured Response, if valid
 std::optional<Response> parse_response(const std::vector<uint8_t>& data);
 
-}  // namespace reed
+}  // namespace panorama

@@ -25,7 +25,7 @@
 static const int TILE_WIDTH = 200;
 static const int TILE_IMG_HEIGHT = 100;
 static const int GRID_COLUMNS = 3;
-static const QString THUMB_CACHE_DIR = "/tmp/reed-tpse/thumbnails";
+static const QString THUMB_CACHE_DIR = "/tmp/tryx-panorama/thumbnails";
 
 // Mapping from built-in video base names to device preset IDs
 static const QMap<QString, QString> PRESET_MAP = {
@@ -647,7 +647,7 @@ void PanoramaPage::applyScreenConfig() {
 }
 
 void PanoramaPage::savePageState() {
-    QSettings settings("reed-tpse", "PanoramaPage");
+    QSettings settings("tryx-panorama", "PanoramaPage");
 
     // Save selected preset tile name
     if (selectedPresetTile_) {
@@ -675,7 +675,7 @@ void PanoramaPage::savePageState() {
 }
 
 void PanoramaPage::restorePageState() {
-    QSettings settings("reed-tpse", "PanoramaPage");
+    QSettings settings("tryx-panorama", "PanoramaPage");
 
     // Restore selected preset tile
     QString savedName = settings.value("preset/selectedName").toString();

@@ -7,10 +7,10 @@
 #include <QThread>
 #include <memory>
 
-#include <reed/device.hpp>
-#include <reed/adb.hpp>
-#include <reed/config.hpp>
-#include <reed/media.hpp>
+#include <panorama/device.hpp>
+#include <panorama/adb.hpp>
+#include <panorama/config.hpp>
+#include <panorama/media.hpp>
 
 class DeviceWorker : public QObject {
     Q_OBJECT
@@ -53,7 +53,7 @@ signals:
     void uploadProgress(const QString &status);
 
 private:
-    std::unique_ptr<reed::Device> device_;
+    std::unique_ptr<panorama::Device> device_;
 };
 
 class DeviceManager : public QObject {
