@@ -21,7 +21,7 @@ public:
     QStringList leftMetrics() const;
     QStringList rightMetrics() const;
     QString playMode() const;
-    QString metricsPosition() const;
+    bool waterfallMode() const;
 
     void assignToLeft(const QString &filename, const QPixmap &thumb);
     void assignToRight(const QString &filename, const QPixmap &thumb);
@@ -38,7 +38,7 @@ private:
 
     // Settings
     QComboBox *playModeCombo_;
-    QComboBox *metricsPositionCombo_;
+    QCheckBox *waterfallCheck_;
     QToolButton *leftMetricsBtn_;
     QToolButton *rightMetricsBtn_;
     QMenu *leftMetricsMenu_;

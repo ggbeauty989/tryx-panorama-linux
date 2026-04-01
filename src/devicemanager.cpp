@@ -90,7 +90,8 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
                                    int filterOpacity,
                                    const QString &presetId,
                                    const QStringList &sysinfoLabels2,
-                                   const QStringList &settingsBadges2) {
+                                   const QStringList &settingsBadges2,
+                                   bool waterfallMode) {
     if (!device_ || !device_->is_connected()) {
         emit error("Устройство не подключено");
         return;
@@ -118,6 +119,8 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
     for (const auto &badge : settingsBadges) {
         config.settings.badges.push_back(badge.toStdString());
     }
+
+    config.waterfall_mode = waterfallMode;
 
     // Screen Splitting: populate second set of settings and sysinfo
     if (screenMode == "Screen Splitting") {
@@ -225,7 +228,9 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
     }
 
     fprintf(stderr, "[config] cpu='%s' gpu='%s'\n", cpuName.c_str(), gpuName.c_str());
-    device_->send_config(cpuName, gpuName, "Celsius");
+
+    // Send full config (KANALI format) - sets everything in one command
+    device_->send_full_config(config, cpuName, gpuName, 75, "Celsius");
 
     emit screenConfigSet();
 }
@@ -446,11 +451,13 @@ void DeviceManager::setScreenConfig(const QStringList &media, const QString &rat
                                     int filterOpacity,
                                     const QString &presetId,
                                     const QStringList &sysinfoLabels2,
-                                    const QStringList &settingsBadges2) {
+                                    const QStringList &settingsBadges2,
+                                    bool waterfallMode) {
     emit requestScreenConfig(media, ratio, screenMode, playMode,
                              sysinfoLabels, settingsPosition, settingsColor,
                              settingsAlign, settingsBadges, filterOpacity,
-                             presetId, sysinfoLabels2, settingsBadges2);
+                             presetId, sysinfoLabels2, settingsBadges2,
+                             waterfallMode);
 }
 
 void DeviceManager::sendSysinfo(const QStringList &labels, const QStringList &values,

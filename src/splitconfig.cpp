@@ -85,10 +85,10 @@ void SplitConfigWidget::setupUi() {
     playModeCombo_->addItems({"Single", "Shuffle", "Loop"});
     settingsLayout->addWidget(playModeCombo_);
 
-    settingsLayout->addWidget(new QLabel("Metrics Position:"));
-    metricsPositionCombo_ = new QComboBox;
-    metricsPositionCombo_->addItems({"Top", "Bottom"});
-    settingsLayout->addWidget(metricsPositionCombo_);
+    waterfallCheck_ = new QCheckBox("Waterfall Mode");
+    waterfallCheck_->setToolTip("Enable if display is physically rotated 90 degrees");
+    waterfallCheck_->setStyleSheet("QCheckBox { color: #ccc; }");
+    settingsLayout->addWidget(waterfallCheck_);
 
     // Left metrics button
     leftMetricsBtn_ = new QToolButton;
@@ -206,8 +206,8 @@ QString SplitConfigWidget::playMode() const {
     return playModeCombo_->currentText();
 }
 
-QString SplitConfigWidget::metricsPosition() const {
-    return metricsPositionCombo_->currentText();
+bool SplitConfigWidget::waterfallMode() const {
+    return waterfallCheck_->isChecked();
 }
 
 void SplitConfigWidget::assignToLeft(const QString &filename, const QPixmap &thumb) {

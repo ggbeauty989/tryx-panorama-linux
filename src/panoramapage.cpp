@@ -391,6 +391,52 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
 
     modeLayout->addStretch();
     fsLayout->addLayout(modeLayout);
+
+    // System info metrics for Full Screen
+    auto *fsMetricsLabel = new QLabel("System info:");
+    fsMetricsLabel->setStyleSheet("color: #aaa; font-size: 11px;");
+
+    customMetricsBtn_ = new QToolButton;
+    customMetricsBtn_->setText(QString::fromUtf8("0 / 3 \u25BC"));
+    customMetricsBtn_->setPopupMode(QToolButton::InstantPopup);
+    customMetricsBtn_->setStyleSheet(
+        "QToolButton { background: #2a2a3e; color: #fff; border: 1px solid #4a4a5e; "
+        "border-radius: 4px; padding: 6px 12px; min-width: 80px; font-size: 12px; } "
+        "QToolButton::menu-indicator { image: none; } "
+        "QToolButton:hover { background: #3a3a4e; }");
+
+    customMetricsMenu_ = new QMenu(this);
+    QStringList metricLabels = {"CPU Temperature", "CPU Frequency", "CPU Usage", "CPU Voltage",
+        "GPU Temperature", "GPU Frequency", "GPU Usage", "GPU Voltage",
+        "Hard Disk Temperature", "Motherboard Temperature", "Memory Frequency",
+        "Memory Utilization", "Date&Time"};
+    for (const auto &label : metricLabels) {
+        auto *wa = new QWidgetAction(customMetricsMenu_);
+        auto *cb = new QCheckBox(label);
+        cb->setStyleSheet("QCheckBox { color: #fff; padding: 4px 8px; } QCheckBox:hover { background: #3a3a4e; }");
+        wa->setDefaultWidget(cb);
+        customMetricsMenu_->addAction(wa);
+        customMetricCheckboxes_.append(cb);
+        connect(cb, &QCheckBox::toggled, this, [this](bool) {
+            int count = 0;
+            for (auto *c : customMetricCheckboxes_)
+                if (c->isChecked()) count++;
+            if (count > 3) {
+                auto *s = qobject_cast<QCheckBox *>(QObject::sender());
+                if (s) s->setChecked(false);
+                return;
+            }
+            customMetricsBtn_->setText(QString::fromUtf8("%1 / 3 \u25BC").arg(count));
+        });
+    }
+    customMetricsBtn_->setMenu(customMetricsMenu_);
+
+    auto *metricsRow = new QHBoxLayout;
+    metricsRow->addWidget(fsMetricsLabel);
+    metricsRow->addWidget(customMetricsBtn_);
+    metricsRow->addStretch();
+    fsLayout->addLayout(metricsRow);
+
     layout->addWidget(fullScreenControls_);
 
     // --- Screen Splitting controls ---
@@ -997,6 +1043,9 @@ void PanoramaPage::onCustomSave() {
                 (long long)leftMedia.size(), (long long)rightMedia.size(),
                 (long long)leftMetrics.size(), (long long)rightMetrics.size());
 
+        bool waterfall = splitConfigWidget_->waterfallMode();
+        fprintf(stderr, "[waterfallMode] user=%d\n", waterfall);
+
         deviceMgr_->setScreenConfig(
             allMedia,
             "2:1",
@@ -1010,7 +1059,8 @@ void PanoramaPage::onCustomSave() {
             0,
             QString(),  // no preset
             rightMetrics,
-            {}     // badges right
+            {},    // badges right
+            waterfall
         );
 
         // Start metrics sending if any metrics selected
@@ -1037,7 +1087,18 @@ void PanoramaPage::onCustomSave() {
         QString ratio = ratioCombo_->currentText();
         QString playMode = playModeCombo_->currentText();
 
-        deviceMgr_->setScreenConfig(media, ratio, "Full Screen", playMode);
+        // Collect selected metrics
+        QStringList metrics;
+        for (auto *cb : customMetricCheckboxes_)
+            if (cb->isChecked()) metrics << cb->text();
+
+        deviceMgr_->setScreenConfig(media, ratio, "Full Screen", playMode, metrics,
+            "Top", "#FFFFFF", "Left", {}, 0);
+
+        if (!metrics.isEmpty()) {
+            QTimer::singleShot(2000, this, [this]() { startMetrics(); });
+        }
+
         emit statusMessage("Full Screen configuration applied");
     }
 }

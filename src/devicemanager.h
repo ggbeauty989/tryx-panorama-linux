@@ -33,7 +33,8 @@ public slots:
                          int filterOpacity,
                          const QString &presetId = QString(),
                          const QStringList &sysinfoLabels2 = {},
-                         const QStringList &settingsBadges2 = {});
+                         const QStringList &settingsBadges2 = {},
+                         bool waterfallMode = false);
     void setRotation(int degrees);
     void rebootDevice();
     void deleteMedia(const QStringList &files);
@@ -83,7 +84,8 @@ public slots:
                          int filterOpacity = 0,
                          const QString &presetId = QString(),
                          const QStringList &sysinfoLabels2 = {},
-                         const QStringList &settingsBadges2 = {});
+                         const QStringList &settingsBadges2 = {},
+                         bool waterfallMode = false);
     void setRotation(int degrees);
     void rebootDevice();
     void deleteMedia(const QStringList &files);
@@ -121,7 +123,8 @@ signals:
                              int filterOpacity,
                              const QString &presetId,
                              const QStringList &sysinfoLabels2,
-                             const QStringList &settingsBadges2);
+                             const QStringList &settingsBadges2,
+                             bool waterfallMode);
     void requestRotation(int degrees);
     void requestReboot();
     void requestDeleteMedia(const QStringList &files);

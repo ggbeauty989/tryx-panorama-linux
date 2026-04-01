@@ -18,6 +18,9 @@
 #include <QTabBar>
 #include <QMap>
 #include <QSettings>
+#include <QToolButton>
+#include <QMenu>
+#include <QWidgetAction>
 
 #include <QRadioButton>
 #include <QMediaPlayer>
@@ -153,6 +156,9 @@ private:
     QWidget *fullScreenControls_;
     SplitConfigWidget *splitConfigWidget_;
     QPushButton *customSaveBtn_;
+    QToolButton *customMetricsBtn_;
+    QMenu *customMetricsMenu_;
+    QList<QCheckBox *> customMetricCheckboxes_;
 
     // Customization tab - user media grid
     QScrollArea *customScrollArea_;
