@@ -1155,6 +1155,7 @@ void PanoramaPage::onRefreshClicked() {
 }
 
 void PanoramaPage::onBrightnessChanged(int value) {
+    fprintf(stderr, "[brightness] %d\n", value);
     deviceMgr_->setBrightness(value);
 }
 

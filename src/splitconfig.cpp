@@ -95,22 +95,23 @@ void SplitConfigWidget::setupUi() {
 
     leftMetricsMenu_ = new QMenu(this);
     for (const auto &label : METRIC_LABELS) {
-        auto *action = leftMetricsMenu_->addAction(label);
-        action->setCheckable(true);
-        leftMetricActions_.append(action);
-        connect(action, &QAction::toggled, this, [this](bool) {
-            // Enforce max 3
+        auto *wa = new QWidgetAction(leftMetricsMenu_);
+        auto *cb = new QCheckBox(label);
+        cb->setStyleSheet("QCheckBox { color: #fff; padding: 4px 8px; } QCheckBox:hover { background: #3a3a4e; }");
+        wa->setDefaultWidget(cb);
+        leftMetricsMenu_->addAction(wa);
+        leftMetricCheckboxes_.append(cb);
+        connect(cb, &QCheckBox::toggled, this, [this](bool) {
             int count = 0;
-            for (auto *a : leftMetricActions_) {
-                if (a->isChecked()) count++;
+            for (auto *c : leftMetricCheckboxes_) {
+                if (c->isChecked()) count++;
             }
             if (count > 3) {
-                // Uncheck the one that was just toggled
-                auto *sender = qobject_cast<QAction *>(QObject::sender());
+                auto *sender = qobject_cast<QCheckBox *>(QObject::sender());
                 if (sender) sender->setChecked(false);
                 return;
             }
-            rebuildMetricsButton(leftMetricsBtn_, leftMetricActions_);
+            rebuildMetricsButtonCb(leftMetricsBtn_, leftMetricCheckboxes_, "Left");
         });
     }
     leftMetricsBtn_->setMenu(leftMetricsMenu_);
@@ -128,20 +129,23 @@ void SplitConfigWidget::setupUi() {
 
     rightMetricsMenu_ = new QMenu(this);
     for (const auto &label : METRIC_LABELS) {
-        auto *action = rightMetricsMenu_->addAction(label);
-        action->setCheckable(true);
-        rightMetricActions_.append(action);
-        connect(action, &QAction::toggled, this, [this](bool) {
+        auto *wa = new QWidgetAction(rightMetricsMenu_);
+        auto *cb = new QCheckBox(label);
+        cb->setStyleSheet("QCheckBox { color: #fff; padding: 4px 8px; } QCheckBox:hover { background: #3a3a4e; }");
+        wa->setDefaultWidget(cb);
+        rightMetricsMenu_->addAction(wa);
+        rightMetricCheckboxes_.append(cb);
+        connect(cb, &QCheckBox::toggled, this, [this](bool) {
             int count = 0;
-            for (auto *a : rightMetricActions_) {
-                if (a->isChecked()) count++;
+            for (auto *c : rightMetricCheckboxes_) {
+                if (c->isChecked()) count++;
             }
             if (count > 3) {
-                auto *sender = qobject_cast<QAction *>(QObject::sender());
+                auto *sender = qobject_cast<QCheckBox *>(QObject::sender());
                 if (sender) sender->setChecked(false);
                 return;
             }
-            rebuildMetricsButton(rightMetricsBtn_, rightMetricActions_);
+            rebuildMetricsButtonCb(rightMetricsBtn_, rightMetricCheckboxes_, "Right");
         });
     }
     rightMetricsBtn_->setMenu(rightMetricsMenu_);
@@ -151,12 +155,11 @@ void SplitConfigWidget::setupUi() {
     mainLayout->addLayout(settingsLayout);
 }
 
-void SplitConfigWidget::rebuildMetricsButton(QToolButton *btn, const QList<QAction *> &actions) {
+void SplitConfigWidget::rebuildMetricsButtonCb(QToolButton *btn, const QList<QCheckBox *> &checkboxes, const QString &side) {
     int count = 0;
-    for (auto *a : actions) {
-        if (a->isChecked()) count++;
+    for (auto *c : checkboxes) {
+        if (c->isChecked()) count++;
     }
-    QString side = (btn == leftMetricsBtn_) ? "Left" : "Right";
     btn->setText(QString::fromUtf8("%1: %2 / 3 \u25BC").arg(side).arg(count));
 }
 
@@ -176,18 +179,18 @@ QStringList SplitConfigWidget::rightMedia() const {
 
 QStringList SplitConfigWidget::leftMetrics() const {
     QStringList list;
-    for (auto *a : leftMetricActions_) {
-        if (a->isChecked())
-            list << a->text();
+    for (auto *c : leftMetricCheckboxes_) {
+        if (c->isChecked())
+            list << c->text();
     }
     return list;
 }
 
 QStringList SplitConfigWidget::rightMetrics() const {
     QStringList list;
-    for (auto *a : rightMetricActions_) {
-        if (a->isChecked())
-            list << a->text();
+    for (auto *c : rightMetricCheckboxes_) {
+        if (c->isChecked())
+            list << c->text();
     }
     return list;
 }

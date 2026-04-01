@@ -6,6 +6,8 @@
 #include <QToolButton>
 #include <QMenu>
 #include <QAction>
+#include <QWidgetAction>
+#include <QCheckBox>
 #include <QPixmap>
 #include <QStringList>
 
@@ -25,7 +27,7 @@ public:
 
 private:
     void setupUi();
-    void rebuildMetricsButton(QToolButton *btn, const QList<QAction *> &actions);
+    void rebuildMetricsButtonCb(QToolButton *btn, const QList<QCheckBox *> &checkboxes, const QString &side);
 
     // Preview frames
     QLabel *leftPreview_;
@@ -39,8 +41,8 @@ private:
     QToolButton *rightMetricsBtn_;
     QMenu *leftMetricsMenu_;
     QMenu *rightMetricsMenu_;
-    QList<QAction *> leftMetricActions_;
-    QList<QAction *> rightMetricActions_;
+    QList<QCheckBox *> leftMetricCheckboxes_;
+    QList<QCheckBox *> rightMetricCheckboxes_;
 
     // Media assignments
     QString leftFilename_;
