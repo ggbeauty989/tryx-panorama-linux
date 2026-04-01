@@ -1,45 +1,19 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# debug information files
-*.dwo
-
-# Build directory
+# Build
 build/
 .cache/
+*.o
+*.a
+*.so
+*.d
+Makefile
+.qmake.stash
+moc_*.cpp
+moc_predefs.h
+tryx-panorama-manager
+
+# Local documentation
+docs/
+
+# Qt generated
+ui_*.h
+qrc_*.cpp

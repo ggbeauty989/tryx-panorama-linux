@@ -1,138 +1,84 @@
-# reed-tpse
+# TRYX Panorama SE 360 - Linux GUI Manager
 
-Linux CLI for Tryx Panorama SE AIO cooler display, reverse-engineered protocol, not affiliated with Tryx.
+Qt6 GUI application for managing the TRYX Panorama SE 360 AIO cooler display on Linux.
 
-https://github.com/user-attachments/assets/1bc87fa9-cde9-4fd5-ab35-a1a15152c467
+## What was done
 
-## Currently supported features
+- Unpacking KANALI (official Windows app) resources to extract built-in media library (15 videos)
+- Full protocol analysis to discover device commands for system metrics display
+- Implemented working real-time CPU/GPU/Disk temperature monitoring on the cooler screen
+- Built complete Qt6 GUI from scratch (Homepage, Panorama, Settings pages)
+- Auto-detection of CPU/GPU hardware names for badge display
+- Auto-conversion of non-MP4 media formats (WebM, MKV, AVI, GIF) before upload to device
+- Fixed serial communication issues (timeouts, wrong command formats, broken ADB quoting)
+- Restructured into a single qmake project
 
-- Upload images, videos, and GIFs (auto-converts to MP4)
-- Set display content and brightness
-- List and delete media files on device
-- systemd user service for persistent display across reboots
+## Features
+
+- Upload images, videos, GIFs (auto-converts non-MP4 formats)
+- 7 built-in device presets (Cooling delivery, Migration, etc.)
+- Real-time system metrics on display (temperature, usage, frequency)
+- Hardware name badges (auto-detected from system)
+- Brightness control (0-100)
+- Display settings: position, alignment, color, filter
+- Keepalive daemon for persistent display
 - Auto-detects device (scans /dev/ttyACM*)
-- Minimal dependencies (picojson header-only)
-
-## TODO
-
-- [ ] CPU stats overlay (temperature, usage, clock speed)
-- [ ] GPU stats (temperature, usage, VRAM, clock speed)
-- [ ] RAM usage
-- [ ] Fan/pump RPM display
-- [ ] Network throughput
-- [ ] Custom overlay layouts
-
-I believe the stats features bove (like CPU stats) should not be too difficult, but I think the image generation (given stats, how do we generate images dynamically with stats rendered on them?) part will be quite challenging. Hopefully the team at Tryx release a Linux Kanali build before we have to implement these features lol.
+- System tray integration (KDE Plasma native)
+- Settings persistence between sessions
+- Async device communication (non-blocking GUI)
 
 ## Requirements
 
 **Build:**
-- CMake >= 3.16
-- C++17 compiler (GCC 8+ / Clang 7+)
+- Qt6 (Core, Gui, Widgets)
+- C++17 compiler
+- qmake6
 
 **Runtime:**
-- `adb` - for file transfer (android-tools on Arch, adb on Debian/Ubuntu)
-- `ffmpeg` - for GIF to MP4 conversion (.gif don't seem to work, so we convert any .gif uploaded to mp4 under-the-hood)
+- `adb` (android-tools) - file transfer
+- `ffmpeg` - media conversion
+- `glxinfo` (mesa-utils) - GPU name detection (optional)
 
 **Permissions:**
-- User must be in `uucp` group (Arch) or `dialout` (Debian/Ubuntu) for serial access
-- Or run with sudo
+- User must be in `dialout` group (or `uucp` on Arch) for serial access
 
 ## Build
 
 ```bash
-cd reed-tpse
-mkdir build && cd build
-cmake ..
-make
-sudo make install
+git clone https://github.com/DXVSI/tryx-panorama-se-360-linux-gui.git
+cd tryx-panorama-se-360-linux-gui
+qmake6
+make -j$(nproc)
+./build/tryx-panorama-manager
 ```
 
-## Usage
-
-```bash
-# Upload media to device
-reed-tpse upload video.mp4
-reed-tpse upload animation.gif  # Auto-converts to MP4
-
-# Set display and start daemon (recommended)
-reed-tpse display video.mp4 --brightness 80
-reed-tpse daemon start
-
-# That's it. Display persists across reboots.
-```
-
-### All commands
-
-```bash
-reed-tpse info                   # Show device info
-reed-tpse upload <file>          # Upload media file
-reed-tpse display <file>         # Set display content
-reed-tpse brightness <0-100>     # Adjust brightness
-reed-tpse list                   # List files on device
-reed-tpse delete <file>          # Delete file from device
-reed-tpse daemon start           # Start background keepalive
-reed-tpse daemon stop            # Stop daemon
-reed-tpse daemon status          # Check daemon status
-```
-
-## Configuration
-
-Config: `~/.config/reed-tpse/config.json`
-
-```json
-{"brightness":100,"keepalive_interval":10}
-```
-
-Port is auto-detected by default. To pin a specific port:
-```json
-{"port":"/dev/ttyACM1","brightness":100,"keepalive_interval":10}
-```
-
-Display state (for daemon): `~/.local/state/reed-tpse/display.json`
-
-## Architecture
+## Project Structure
 
 ```
-reed-tpse/
-├── include/reed/      # Public headers (libreed)
-│   ├── picojson.h     # JSON parser (header-only, third-party)
-│   ├── protocol.hpp   # Frame protocol
-│   ├── device.hpp     # Serial device communication
-│   ├── adb.hpp        # ADB wrapper
-│   ├── media.hpp      # Media type detection, GIF conversion
-│   └── config.hpp     # XDG config/state management
-├── src/               # Library implementation
-├── cli/               # CLI frontend
-└── systemd/           # systemd user service
+src/
+  core/              # Device protocol library
+  main.cpp           # Entry point
+  mainwindow.*       # Main window with navigation
+  panoramapage.*     # Display + metrics configuration
+  homepage.*         # System monitoring dashboard
+  settingspage.*     # App settings
+  devicemanager.*    # Async device communication
+  systemmonitor.*    # System metrics reader
+  traymanager.*      # System tray
+include/reed/        # Protocol headers
+media/               # Built-in videos
 ```
-
-The core functionality is in `libreed.a`. The CLI links against it. Future GUI (maybe in v2.0.0?) will also link against the same library.
-
-## How it works
-
-This is a TLDR on how it works. I plan to write a blog post on this some time in the future. Will update this section once the blog post is live.
-
-The Tryx Panorama SE exposes:
-1. **USB CDC ACM** (`/dev/ttyACM0`): Serial interface for display commands
-2. **ADB**: Android Debug Bridge for file transfer to `/sdcard/pcMedia/`
-
-The device requires periodic keepalive (~60s timeout) or it reverts to the default screen. The daemon runs in the background (~1MB RAM, negligible CPU, I bet you could run this on a potato and not notice it) and handles this automatically.
 
 ## Tested on
 
-| Distro | Kernel | CPU | GPU | Contributor |
-|--------|--------|-----|-----|-------------|
-| Arch Linux | 6.17.9 | Intel Core Ultra 9 285K | NVIDIA RTX 5080 | [@fadli0029](https://github.com/fadli0029) |
-| Bazzite | 6.17.7 | AMD Ryzen 7 9800X3D | Radeon RX 9070XT | [@CRE82DV8](https://github.com/CRE82DV8) |
-| CachyOS | 6.19.8-1-cachyos | AMD Ryzen 9 9950X3D | AMD Radeon RX 9070 XT | [@nerddotdad](https://github.com/nerddotdad) |
-
-If you've tested on a different system, feel free to add yours via PR.
+| Distro | Kernel | CPU | GPU1 | GPU2 |
+|--------|--------|-----|------|------|
+| Fedora 43 | 6.19.9 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
 
 ## License
 
 MIT
 
-## Contributing
+## Credits
 
-Issues and pull requests welcome at https://github.com/fadli0029/reed-tpse
+Based on [reed-tpse](https://github.com/fadli0029/reed-tpse) protocol library.

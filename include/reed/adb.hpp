@@ -14,6 +14,7 @@ class Adb {
   static bool push(const std::string& local_path,
                    const std::string& remote_name);
   static std::optional<std::vector<std::string>> list_media();
+  static bool file_exists(const std::string& filename);
   static bool remove(const std::string& filename);
 
  private:

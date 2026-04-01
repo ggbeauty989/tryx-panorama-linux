@@ -1,0 +1,284 @@
+#include "hudpage.h"
+#include "devicemanager.h"
+
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QGroupBox>
+#include <QGridLayout>
+#include <QColorDialog>
+#include <QDateTime>
+
+HudPage::HudPage(DeviceManager *deviceMgr, QWidget *parent)
+    : QWidget(parent), deviceMgr_(deviceMgr) {
+
+    monitor_ = new SystemMonitor(this);
+    metricsTimer_ = new QTimer(this);
+
+    setupUi();
+
+    connect(metricsTimer_, &QTimer::timeout, this, &HudPage::onSendMetrics);
+}
+
+void HudPage::setupUi() {
+    auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setSpacing(12);
+
+    // Metric selection (max 3)
+    auto *metricsGroup = new QGroupBox("Метрики на дисплее (макс. 3)");
+    auto *metricsLayout = new QGridLayout(metricsGroup);
+
+    struct MetricDef {
+        QString displayName;
+        QString protocolLabel;
+        QString unit;
+    };
+
+    QList<MetricDef> defs = {
+        {"CPU Temperature",          "CPU Temperature",          "°C"},
+        {"CPU Frequency",            "CPU Frequency",            "MHz"},
+        {"CPU Usage",                "CPU Usage",                "%"},
+        {"CPU Voltage",              "CPU Voltage",              "V"},
+        {"GPU Temperature",          "GPU Temperature",          "°C"},
+        {"GPU Frequency",            "GPU Frequency",            "MHz"},
+        {"GPU Voltage",              "GPU Voltage",              "V"},
+        {"Motherboard Temperature",  "Motherboard Temperature",  "°C"},
+        {"Memory Frequency",         "Memory Frequency",         "MHz"},
+        {"Memory Utilization",       "Memory Utilization",       "%"},
+        {"Date & Time",              "Date & Time",              ""},
+    };
+
+    int row = 0, col = 0;
+    for (const auto &def : defs) {
+        auto *cb = new QCheckBox(def.displayName);
+        metricsLayout->addWidget(cb, row, col);
+
+        MetricOption opt;
+        opt.checkbox = cb;
+        opt.label = def.protocolLabel;
+        opt.unit = def.unit;
+        metricOptions_.append(opt);
+
+        connect(cb, &QCheckBox::toggled, this, &HudPage::onMetricToggled);
+
+        col++;
+        if (col >= 3) { col = 0; row++; }
+    }
+
+    selectionCountLabel_ = new QLabel("Выбрано: 0 / 3");
+    metricsLayout->addWidget(selectionCountLabel_, row + 1, 0, 1, 3);
+
+    mainLayout->addWidget(metricsGroup);
+
+    // Display settings
+    auto *settingsGroup = new QGroupBox("Настройки отображения");
+    auto *settingsLayout = new QGridLayout(settingsGroup);
+
+    settingsLayout->addWidget(new QLabel("Позиция:"), 0, 0);
+    positionCombo_ = new QComboBox;
+    positionCombo_->addItems({"Top", "Center", "Bottom"});
+    settingsLayout->addWidget(positionCombo_, 0, 1);
+
+    settingsLayout->addWidget(new QLabel("Выравнивание:"), 1, 0);
+    alignCombo_ = new QComboBox;
+    alignCombo_->addItems({"Left", "Center", "Right"});
+    settingsLayout->addWidget(alignCombo_, 1, 1);
+
+    textColorBtn_ = new QPushButton("Цвет текста");
+    textColorBtn_->setStyleSheet("background-color: #FFFFFF;");
+    settingsLayout->addWidget(textColorBtn_, 2, 0, 1, 2);
+
+    connect(textColorBtn_, &QPushButton::clicked, this, &HudPage::onChooseTextColor);
+
+    // Badges
+    cbCpuBadge_ = new QCheckBox("CPU Badge");
+    cbGpuBadge_ = new QCheckBox("GPU Badge");
+    settingsLayout->addWidget(cbCpuBadge_, 3, 0);
+    settingsLayout->addWidget(cbGpuBadge_, 3, 1);
+
+    mainLayout->addWidget(settingsGroup);
+
+    // Apply config button
+    applyConfigBtn_ = new QPushButton("Применить конфигурацию");
+    applyConfigBtn_->setMinimumHeight(36);
+    mainLayout->addWidget(applyConfigBtn_);
+    connect(applyConfigBtn_, &QPushButton::clicked, this, &HudPage::onApplyConfig);
+
+    // Interval + start/stop metrics sending
+    auto *controlGroup = new QGroupBox("Отправка метрик");
+    auto *controlLayout = new QHBoxLayout(controlGroup);
+
+    controlLayout->addWidget(new QLabel("Интервал (сек):"));
+    intervalSpin_ = new QSpinBox;
+    intervalSpin_->setRange(1, 60);
+    intervalSpin_->setValue(5);
+    controlLayout->addWidget(intervalSpin_);
+
+    startStopBtn_ = new QPushButton("Запустить");
+    startStopBtn_->setMinimumHeight(36);
+    controlLayout->addWidget(startStopBtn_);
+
+    mainLayout->addWidget(controlGroup);
+
+    connect(startStopBtn_, &QPushButton::clicked, this, &HudPage::onStartStopClicked);
+
+    // Status
+    statusLabel_ = new QLabel("Метрики не отправляются");
+    statusLabel_->setStyleSheet("color: #888; padding: 8px;");
+    mainLayout->addWidget(statusLabel_);
+
+    mainLayout->addStretch();
+}
+
+void HudPage::onMetricToggled() {
+    int count = 0;
+    for (const auto &opt : metricOptions_) {
+        if (opt.checkbox->isChecked()) count++;
+    }
+
+    selectionCountLabel_->setText(QString("Выбрано: %1 / 3").arg(count));
+
+    // Disable unchecked if already 3 selected
+    for (auto &opt : metricOptions_) {
+        if (!opt.checkbox->isChecked()) {
+            opt.checkbox->setEnabled(count < 3);
+        }
+    }
+}
+
+void HudPage::onChooseTextColor() {
+    QColor color = QColorDialog::getColor(textColor_, this, "Цвет текста");
+    if (color.isValid()) {
+        textColor_ = color;
+        textColorBtn_->setStyleSheet(
+            QString("background-color: %1;").arg(color.name()));
+    }
+}
+
+void HudPage::onApplyConfig() {
+    applyScreenConfig();
+    emit statusMessage("Конфигурация метрик применена");
+}
+
+void HudPage::applyScreenConfig() {
+    // Collect selected labels
+    QStringList labels;
+    for (const auto &opt : metricOptions_) {
+        if (opt.checkbox->isChecked()) {
+            labels << opt.label;
+        }
+    }
+
+    // Collect badges
+    QStringList badges;
+    if (cbCpuBadge_->isChecked()) badges << "CPU Badge";
+    if (cbGpuBadge_->isChecked()) badges << "GPU Badge";
+
+    // Get current media from device (we don't change it, just re-apply config)
+    // The screen config is sent with current display settings
+    deviceMgr_->setScreenConfig(
+        {},                                     // media - empty means keep current
+        "2:1",                                  // ratio
+        "Full Screen",                          // screenMode
+        "Single",                               // playMode
+        labels,                                 // sysinfoDisplay
+        positionCombo_->currentText(),          // position
+        textColor_.name(),                      // color
+        alignCombo_->currentText(),             // align
+        badges,                                 // badges
+        0                                       // filter opacity
+    );
+}
+
+void HudPage::onStartStopClicked() {
+    if (hudRunning_) {
+        stopHud();
+    } else {
+        startHud();
+    }
+}
+
+void HudPage::startHud() {
+    if (hudRunning_) return;
+
+    // Check that at least one metric is selected
+    QStringList labels;
+    for (const auto &opt : metricOptions_) {
+        if (opt.checkbox->isChecked()) {
+            labels << opt.label;
+        }
+    }
+    if (labels.isEmpty()) {
+        emit statusMessage("Выберите хотя бы одну метрику");
+        return;
+    }
+
+    // Apply screen config first
+    applyScreenConfig();
+
+    hudRunning_ = true;
+    startStopBtn_->setText("Остановить");
+    metricsTimer_->start(intervalSpin_->value() * 1000);
+    emit hudRunningChanged(true);
+    statusLabel_->setText("Метрики отправляются...");
+    statusLabel_->setStyleSheet("color: #4CAF50; padding: 8px;");
+
+    // Send first batch immediately
+    onSendMetrics();
+}
+
+void HudPage::stopHud() {
+    if (!hudRunning_) return;
+
+    hudRunning_ = false;
+    metricsTimer_->stop();
+    startStopBtn_->setText("Запустить");
+    emit hudRunningChanged(false);
+    statusLabel_->setText("Метрики не отправляются");
+    statusLabel_->setStyleSheet("color: #888; padding: 8px;");
+}
+
+void HudPage::onSendMetrics() {
+    monitor_->update();
+    auto metrics = monitor_->currentMetrics();
+
+    QStringList labels, values, units;
+
+    for (const auto &opt : metricOptions_) {
+        if (!opt.checkbox->isChecked()) continue;
+
+        QString value;
+        if (opt.label == "CPU Temperature") {
+            value = QString::number(metrics.cpu.temperature, 'f', 0);
+        } else if (opt.label == "CPU Frequency") {
+            value = QString::number(metrics.cpu.frequencyMHz, 'f', 0);
+        } else if (opt.label == "CPU Usage") {
+            value = QString::number(metrics.cpu.usagePercent, 'f', 1);
+        } else if (opt.label == "CPU Voltage") {
+            value = "0"; // TODO: read CPU voltage from sysfs
+        } else if (opt.label == "GPU Temperature") {
+            value = !metrics.gpus.isEmpty()
+                        ? QString::number(metrics.gpus[0].temperature, 'f', 0)
+                        : "0";
+        } else if (opt.label == "GPU Frequency") {
+            value = "0"; // TODO: read GPU clock from sysfs
+        } else if (opt.label == "GPU Voltage") {
+            value = "0"; // TODO: read GPU voltage from sysfs
+        } else if (opt.label == "Motherboard Temperature") {
+            value = "0"; // TODO: read MB temp from sysfs
+        } else if (opt.label == "Memory Frequency") {
+            value = "0"; // TODO: read RAM frequency
+        } else if (opt.label == "Memory Utilization") {
+            value = QString::number(metrics.ram.usagePercent, 'f', 1);
+        } else if (opt.label == "Date & Time") {
+            value = QDateTime::currentDateTime().toString("hh:mm:ss");
+        }
+
+        labels << opt.label;
+        values << value;
+        units << opt.unit;
+    }
+
+    deviceMgr_->sendSysinfo(labels, values, units);
+
+    statusLabel_->setText(QString("Отправлено: %1 метрик").arg(labels.size()));
+}

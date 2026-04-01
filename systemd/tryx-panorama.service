@@ -1,0 +1,13 @@
+[Unit]
+Description=TRYX Panorama SE 360 Display Manager
+Documentation=https://github.com/fadli0029/reed-tpse
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/tryx-panorama-manager --daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -17,6 +17,9 @@ class Media {
   static std::string get_converted_name(const std::string& original);
   static bool convert_gif_to_mp4(const std::string& input,
                                  const std::string& output);
+  static bool convert_to_mp4(const std::string& input,
+                             const std::string& output);
+  static bool needs_conversion(const std::string& path);
   static bool is_ffmpeg_available();
 };
 

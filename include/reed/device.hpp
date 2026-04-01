@@ -18,11 +18,28 @@ struct DeviceInfo {
   std::vector<std::string> attributes;
 };
 
+struct DisplaySettings {
+  std::string position = "Top";    // "Top", "Center", "Bottom"
+  std::string color = "#FFFFFF";   // hex color
+  std::string align = "Left";     // "Left", "Center", "Right"
+  std::vector<std::string> badges; // e.g. "CPU Badge", "GPU Badge"
+  int filter_opacity = 0;          // 0-100
+};
+
 struct ScreenConfig {
+  std::string preset_id;  // e.g. "Pre-set 1: Cooling delivery" (empty = custom mode)
   std::vector<std::string> media;
   std::string screen_mode = "Full Screen";
   std::string ratio = "2:1";
   std::string play_mode = "Single";
+  std::vector<std::string> sysinfo_display; // max 3 labels
+  DisplaySettings settings;
+};
+
+struct SysinfoData {
+  std::string label;  // e.g. "CPU Temperature"
+  std::string value;  // e.g. "65"
+  std::string unit;   // e.g. "°C"
 };
 
 class Device {
@@ -48,8 +65,12 @@ class Device {
 
   std::optional<DeviceInfo> handshake();
   std::optional<Response> set_screen_config(const ScreenConfig& config);
+  std::optional<Response> set_sysinfo_display(const ScreenConfig& config);
+  std::optional<Response> set_temperature_unit(const std::string& unit = "Celsius");
+  std::optional<Response> send_config(const std::string& cpu_name, const std::string& gpu_name, const std::string& temp_unit = "Celsius");
   std::optional<Response> set_brightness(int value);
   std::optional<Response> delete_media(const std::vector<std::string>& files);
+  std::optional<Response> send_sysinfo(const std::vector<SysinfoData>& data);
 
  private:
   std::string port_;
