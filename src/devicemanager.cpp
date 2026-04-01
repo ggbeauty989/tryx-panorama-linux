@@ -352,6 +352,13 @@ void DeviceWorker::sendKeepalive() {
     device_->handshake();
 }
 
+void DeviceWorker::setRotation(int degrees) {
+    if (!device_ || !device_->is_connected()) {
+        return;
+    }
+    device_->set_rotation(degrees);
+}
+
 // --- DeviceManager ---
 
 DeviceManager::DeviceManager(QObject *parent)
@@ -392,6 +399,7 @@ DeviceManager::DeviceManager(QObject *parent)
     connect(this, &DeviceManager::requestUploadMedia, worker_, &DeviceWorker::uploadMedia);
     connect(this, &DeviceManager::requestRefreshMedia, worker_, &DeviceWorker::refreshMediaList);
     connect(this, &DeviceManager::requestKeepalive, worker_, &DeviceWorker::sendKeepalive);
+    connect(this, &DeviceManager::requestRotation, worker_, &DeviceWorker::setRotation);
     connect(this, &DeviceManager::requestSysinfo, worker_, &DeviceWorker::sendSysinfo);
     connect(worker_, &DeviceWorker::sysinfoSent, this, &DeviceManager::sysinfoSent);
 
@@ -442,6 +450,10 @@ void DeviceManager::setScreenConfig(const QStringList &media, const QString &rat
 void DeviceManager::sendSysinfo(const QStringList &labels, const QStringList &values,
                                 const QStringList &units) {
     emit requestSysinfo(labels, values, units);
+}
+
+void DeviceManager::setRotation(int degrees) {
+    emit requestRotation(degrees);
 }
 
 void DeviceManager::deleteMedia(const QStringList &files) {

@@ -540,6 +540,13 @@ std::optional<Response> Device::set_waterfall_mode(bool enable) {
   return send_command("POST", "waterfallMode", content);
 }
 
+std::optional<Response> Device::set_rotation(int degrees) {
+  picojson::object obj;
+  obj["degree"] = picojson::value(static_cast<double>(degrees));
+  std::string content = picojson::value(obj).serialize();
+  return send_command("POST", "rotate", content);
+}
+
 std::optional<Response> Device::set_brightness(int value) {
   picojson::object obj;
   obj["value"] = picojson::value(static_cast<double>(value));

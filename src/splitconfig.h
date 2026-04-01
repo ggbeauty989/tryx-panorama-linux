@@ -21,6 +21,7 @@ public:
     QStringList leftMetrics() const;
     QStringList rightMetrics() const;
     QString playMode() const;
+    int rotation() const;
 
     void assignToLeft(const QString &filename, const QPixmap &thumb);
     void assignToRight(const QString &filename, const QPixmap &thumb);
@@ -37,6 +38,7 @@ private:
 
     // Settings
     QComboBox *playModeCombo_;
+    QComboBox *rotationCombo_;
     QToolButton *leftMetricsBtn_;
     QToolButton *rightMetricsBtn_;
     QMenu *leftMetricsMenu_;

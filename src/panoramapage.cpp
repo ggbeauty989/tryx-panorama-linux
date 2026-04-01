@@ -1013,6 +1013,11 @@ void PanoramaPage::onCustomSave() {
             {}     // badges right
         );
 
+        // Send rotation
+        int rotation = splitConfigWidget_->rotation();
+        fprintf(stderr, "[rotation] %d\n", rotation);
+        deviceMgr_->setRotation(rotation);
+
         emit statusMessage("Screen Splitting configuration applied");
     } else {
         // Full Screen mode - use selected files from list

@@ -83,6 +83,12 @@ void SplitConfigWidget::setupUi() {
     playModeCombo_->addItems({"Single", "Shuffle", "Loop"});
     settingsLayout->addWidget(playModeCombo_);
 
+    settingsLayout->addWidget(new QLabel("Rotation:"));
+    rotationCombo_ = new QComboBox;
+    rotationCombo_->addItems({"0", "90", "180", "270"});
+    rotationCombo_->setCurrentText("270");
+    settingsLayout->addWidget(rotationCombo_);
+
     // Left metrics button
     leftMetricsBtn_ = new QToolButton;
     leftMetricsBtn_->setText(QString::fromUtf8("Left: 0 / 3 \u25BC"));
@@ -197,6 +203,10 @@ QStringList SplitConfigWidget::rightMetrics() const {
 
 QString SplitConfigWidget::playMode() const {
     return playModeCombo_->currentText();
+}
+
+int SplitConfigWidget::rotation() const {
+    return rotationCombo_->currentText().toInt();
 }
 
 void SplitConfigWidget::assignToLeft(const QString &filename, const QPixmap &thumb) {

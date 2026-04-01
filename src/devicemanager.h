@@ -34,6 +34,7 @@ public slots:
                          const QString &presetId = QString(),
                          const QStringList &sysinfoLabels2 = {},
                          const QStringList &settingsBadges2 = {});
+    void setRotation(int degrees);
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -82,6 +83,7 @@ public slots:
                          const QString &presetId = QString(),
                          const QStringList &sysinfoLabels2 = {},
                          const QStringList &settingsBadges2 = {});
+    void setRotation(int degrees);
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -118,6 +120,7 @@ signals:
                              const QString &presetId,
                              const QStringList &sysinfoLabels2,
                              const QStringList &settingsBadges2);
+    void requestRotation(int degrees);
     void requestDeleteMedia(const QStringList &files);
     void requestUploadMedia(const QString &localPath);
     void requestRefreshMedia();
