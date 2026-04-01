@@ -18,13 +18,13 @@
 #include <QProcess>
 #include <QPixmap>
 #include <QMouseEvent>
+#include <QResizeEvent>
 #include <QFont>
 #include <QSettings>
 #include <memory>
 
-static const int TILE_WIDTH = 200;
-static const int TILE_IMG_HEIGHT = 100;
-static const int GRID_COLUMNS = 3;
+static const int TILE_WIDTH = 250;
+static const int TILE_IMG_HEIGHT = 140;
 static const QString THUMB_CACHE_DIR = "/tmp/tryx-panorama/thumbnails";
 
 // Mapping from built-in video base names to device preset IDs
@@ -191,19 +191,37 @@ void PanoramaPage::setupPresetTab(QWidget *parent) {
     mediaLabel->setStyleSheet("color: #fff;");
     layout->addWidget(mediaLabel);
 
-    presetScrollArea_ = new QScrollArea;
-    presetScrollArea_->setWidgetResizable(true);
-    presetScrollArea_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    presetScrollArea_->setMinimumHeight(200);
-    presetScrollArea_->setMaximumHeight(360);
-    presetScrollArea_->setStyleSheet("QScrollArea { border: none; }");
+    // Video preview via QVideoSink -> QLabel (no native window, works on Wayland)
+    previewLabel_ = new QLabel;
+    previewLabel_->setFixedSize(420, 200);
+    previewLabel_->setAlignment(Qt::AlignCenter);
+    previewLabel_->setStyleSheet("background: #000; border-radius: 8px; border: none;");
+    previewLabel_->hide();
+    layout->addWidget(previewLabel_, 0, Qt::AlignCenter);
+
+    auto *previewAudio = new QAudioOutput(this);
+    previewAudio->setVolume(0);
+    previewPlayer_ = new QMediaPlayer(this);
+    previewPlayer_->setAudioOutput(previewAudio);
+    previewSink_ = new QVideoSink(this);
+    previewPlayer_->setVideoOutput(previewSink_);
+    connect(previewSink_, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
+        QVideoFrame f = frame;
+        if (f.map(QVideoFrame::ReadOnly)) {
+            QImage img = f.toImage();
+            f.unmap();
+            if (!img.isNull()) {
+                previewLabel_->setPixmap(QPixmap::fromImage(
+                    img.scaled(previewLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+            }
+        }
+    });
 
     presetGridWidget_ = new QWidget;
     presetGrid_ = new QGridLayout(presetGridWidget_);
     presetGrid_->setSpacing(8);
     presetGrid_->setContentsMargins(0, 0, 0, 0);
-    presetScrollArea_->setWidget(presetGridWidget_);
-    layout->addWidget(presetScrollArea_);
+    layout->addWidget(presetGridWidget_);
 
     loadBuiltinMedia();
 
@@ -490,7 +508,6 @@ void PanoramaPage::loadBuiltinMedia() {
                            "*.gif", "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"};
     auto entries = dir.entryInfoList(filters, QDir::Files, QDir::Name);
 
-    int row = 0, col = 0;
     for (const auto &entry : entries) {
         MediaEntry me;
         me.filePath = entry.absoluteFilePath();
@@ -516,15 +533,10 @@ void PanoramaPage::loadBuiltinMedia() {
         badge->move(4, 4);
         badge->raise();
 
-        presetGrid_->addWidget(tile, row, col);
         presetTiles_.append(tile);
-
-        col++;
-        if (col >= GRID_COLUMNS) {
-            col = 0;
-            row++;
-        }
     }
+
+    rebuildPresetGrid();
 }
 
 void PanoramaPage::onTileClicked(MediaTile *tile) {
@@ -534,6 +546,28 @@ void PanoramaPage::onTileClicked(MediaTile *tile) {
     }
     tile->setSelected(!tile->isSelected());
     selectedPresetTile_ = tile->isSelected() ? tile : nullptr;
+
+    // Preview
+    previewPlayer_->stop();
+    previewLabel_->hide();
+
+    if (selectedPresetTile_) {
+        QString path = selectedPresetTile_->filePath();
+        QString ext = path.section('.', -1).toLower();
+        if (ext == "mp4" || ext == "webm" || ext == "mkv" || ext == "avi" || ext == "mov") {
+            previewLabel_->show();
+            previewPlayer_->setSource(QUrl::fromLocalFile(path));
+            previewPlayer_->setLoops(QMediaPlayer::Infinite);
+            previewPlayer_->play();
+        } else {
+            QPixmap thumb = selectedPresetTile_->thumbnail();
+            if (!thumb.isNull()) {
+                previewLabel_->setPixmap(QPixmap::fromImage(
+                    thumb.toImage().scaled(previewLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+                previewLabel_->show();
+            }
+        }
+    }
 }
 
 void PanoramaPage::onMetricToggled() {
@@ -990,5 +1024,36 @@ void PanoramaPage::dropEvent(QDropEvent *event) {
             deviceMgr_->uploadMedia(url.toLocalFile());
             break;
         }
+    }
+}
+
+int PanoramaPage::calculateGridColumns() const {
+    int availableWidth = presetGridWidget_ ? presetGridWidget_->width() : 810;
+    int cols = availableWidth / 270;
+    return qMax(2, cols);
+}
+
+void PanoramaPage::rebuildPresetGrid() {
+    // Remove all widgets from grid without deleting them
+    while (presetGrid_->count() > 0) {
+        presetGrid_->takeAt(0);
+    }
+
+    int columns = calculateGridColumns();
+    int row = 0, col = 0;
+    for (auto *tile : presetTiles_) {
+        presetGrid_->addWidget(tile, row, col);
+        col++;
+        if (col >= columns) {
+            col = 0;
+            row++;
+        }
+    }
+}
+
+void PanoramaPage::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    if (!presetTiles_.isEmpty()) {
+        rebuildPresetGrid();
     }
 }

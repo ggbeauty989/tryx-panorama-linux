@@ -19,6 +19,10 @@
 #include <QMap>
 #include <QSettings>
 
+#include <QMediaPlayer>
+#include <QVideoSink>
+#include <QVideoFrame>
+#include <QAudioOutput>
 #include "systemmonitor.h"
 
 class DeviceManager;
@@ -79,6 +83,9 @@ private:
     void savePageState();
     void restorePageState();
 
+    void rebuildPresetGrid();
+    int calculateGridColumns() const;
+
     static QString builtinMediaDir();
     static QString presetIdForName(const QString &name);
 
@@ -97,6 +104,11 @@ private:
     QGridLayout *presetGrid_;
     QList<MediaTile *> presetTiles_;
     MediaTile *selectedPresetTile_ = nullptr;
+
+    // Preview
+    QLabel *previewLabel_ = nullptr;
+    QMediaPlayer *previewPlayer_ = nullptr;
+    QVideoSink *previewSink_ = nullptr;
 
     // Pre-set tab - sysinfo display
     struct MetricOption {
@@ -145,4 +157,5 @@ private:
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 };

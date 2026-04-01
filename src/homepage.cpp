@@ -4,27 +4,172 @@
 #include <QHBoxLayout>
 #include <QFont>
 #include <QScrollArea>
+#include <QPainterPath>
+#include <QtMath>
+
+// ============================================================
+// GaugeWidget - semi-circular gauge with needle
+// ============================================================
+
+GaugeWidget::GaugeWidget(QWidget *parent)
+    : QWidget(parent) {
+    setMinimumSize(140, 100);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+}
+
+void GaugeWidget::setValue(double percent) {
+    value_ = qBound(0.0, percent, 100.0);
+    update();
+}
+
+void GaugeWidget::paintEvent(QPaintEvent *) {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const int w = width();
+    const int h = height();
+    const int margin = 10;
+    const int maxDiam = qMin(w - 40, 160);
+    const int diameter = qMin(maxDiam, (h - 20) * 2);
+    const int radius = diameter / 2;
+    const QPointF center(w / 2.0, margin + radius + 4);
+
+    const QRectF arcRect(center.x() - radius, center.y() - radius,
+                         diameter, diameter);
+
+    // Arc angles: Qt uses 1/16th degrees, 0 = 3 o'clock, counter-clockwise positive
+    // We want arc from 200 deg to -20 deg (span of 220 degrees, a wide semi-circle)
+    const double startAngle = 200.0;   // left side
+    const double spanAngle = -220.0;   // sweep clockwise
+
+    // Background arc
+    QPen bgPen(QColor(60, 60, 80), 8, Qt::SolidLine, Qt::RoundCap);
+    p.setPen(bgPen);
+    p.drawArc(arcRect, static_cast<int>(startAngle * 16),
+              static_cast<int>(spanAngle * 16));
+
+    // Value arc
+    double valueSpan = spanAngle * (value_ / 100.0);
+    QPen valPen(QColor(0xDE, 0xF7, 0x50), 8, Qt::SolidLine, Qt::RoundCap);
+    p.setPen(valPen);
+    if (qAbs(valueSpan) > 0.5) {
+        p.drawArc(arcRect, static_cast<int>(startAngle * 16),
+                  static_cast<int>(valueSpan * 16));
+    }
+
+    // Needle
+    double needleAngle = startAngle + spanAngle * (value_ / 100.0);
+    double needleRad = qDegreesToRadians(needleAngle);
+    double needleLen = radius - 14;
+    QPointF needleTip(center.x() + needleLen * qCos(needleRad),
+                      center.y() - needleLen * qSin(needleRad));
+    QPen needlePen(QColor(255, 255, 255, 200), 2, Qt::SolidLine, Qt::RoundCap);
+    p.setPen(needlePen);
+    p.drawLine(center, needleTip);
+
+    // Center dot
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(255, 255, 255, 220));
+    p.drawEllipse(center, 3.0, 3.0);
+}
+
+// ============================================================
+// GraphWidget - rolling line chart
+// ============================================================
+
+GraphWidget::GraphWidget(const QColor &lineColor, QWidget *parent)
+    : QWidget(parent), lineColor_(lineColor) {
+    setMinimumSize(200, 60);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    data_.fill(0.0, MAX_POINTS);
+}
+
+void GraphWidget::addValue(double val) {
+    data_.append(val);
+    if (data_.size() > MAX_POINTS) {
+        data_.removeFirst();
+    }
+    update();
+}
+
+void GraphWidget::paintEvent(QPaintEvent *) {
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const int w = width();
+    const int h = height();
+    const int pad = 4;
+    const double drawW = w - 2 * pad;
+    const double drawH = h - 2 * pad;
+
+    // Find max for scaling
+    double maxVal = 1.0;
+    for (double v : data_) {
+        if (v > maxVal) maxVal = v;
+    }
+
+    // Draw grid lines (subtle)
+    p.setPen(QPen(QColor(60, 60, 80, 80), 1));
+    for (int i = 1; i < 4; i++) {
+        double y = pad + drawH * i / 4.0;
+        p.drawLine(QPointF(pad, y), QPointF(w - pad, y));
+    }
+
+    // Build path
+    if (data_.size() < 2) return;
+
+    QPainterPath path;
+    QPainterPath fillPath;
+    double step = drawW / (MAX_POINTS - 1);
+
+    for (int i = 0; i < data_.size(); i++) {
+        double x = pad + i * step;
+        double y = pad + drawH - (data_[i] / maxVal) * drawH;
+        if (i == 0) {
+            path.moveTo(x, y);
+            fillPath.moveTo(x, h - pad);
+            fillPath.lineTo(x, y);
+        } else {
+            path.lineTo(x, y);
+            fillPath.lineTo(x, y);
+        }
+    }
+
+    // Fill under the curve
+    fillPath.lineTo(pad + (data_.size() - 1) * step, h - pad);
+    fillPath.closeSubpath();
+    QColor fillColor = lineColor_;
+    fillColor.setAlpha(30);
+    p.setPen(Qt::NoPen);
+    p.setBrush(fillColor);
+    p.drawPath(fillPath);
+
+    // Draw line
+    QPen linePen(lineColor_, 2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    p.setPen(linePen);
+    p.setBrush(Qt::NoBrush);
+    p.drawPath(path);
+}
+
+// ============================================================
+// Homepage
+// ============================================================
+
+static const QColor BG_COLOR(0x1a, 0x1a, 0x2e);
+static const QColor CARD_BG(0x2a, 0x2a, 0x3e);
+static const QColor CARD_BORDER(0x3a, 0x3a, 0x4e);
+static const QColor ACCENT(0xDE, 0xF7, 0x50);
+static const QColor TEXT_WHITE(255, 255, 255);
+static const QColor TEXT_GRAY(0xaa, 0xaa, 0xaa);
+static const QColor GRAPH_GREEN(0x55, 0xef, 0xc4);
+static const QColor GRAPH_BLUE(0x74, 0xb9, 0xff);
 
 static const QString CARD_STYLE =
-    "QFrame {"
-    "  background: #1e1e2e;"
-    "  border: 1px solid #333;"
-    "  border-radius: 10px;"
+    "QFrame#DashCard {"
+    "  background: #2a2a3e;"
+    "  border: 1px solid #3a3a4e;"
+    "  border-radius: 12px;"
     "  padding: 16px;"
-    "}";
-
-static const QString BAR_STYLE =
-    "QProgressBar {"
-    "  border: none;"
-    "  border-radius: 4px;"
-    "  background: #2a2a3a;"
-    "  height: 8px;"
-    "  text-align: center;"
-    "}"
-    "QProgressBar::chunk {"
-    "  border-radius: 4px;"
-    "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-    "    stop:0 #6c5ce7, stop:1 #a29bfe);"
     "}";
 
 Homepage::Homepage(QWidget *parent)
@@ -41,24 +186,10 @@ Homepage::Homepage(QWidget *parent)
     monitor_->update();
 }
 
-QFrame *Homepage::createCard(const QString &title, QLayout *contentLayout) {
+QFrame *Homepage::createCard() {
     auto *card = new QFrame;
+    card->setObjectName("DashCard");
     card->setStyleSheet(CARD_STYLE);
-    card->setMinimumSize(240, 140);
-
-    auto *layout = new QVBoxLayout(card);
-    layout->setSpacing(8);
-
-    auto *titleLabel = new QLabel(title);
-    QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(10);
-    titleFont.setBold(true);
-    titleLabel->setFont(titleFont);
-    titleLabel->setStyleSheet("color: #888; border: none; padding: 0;");
-    layout->addWidget(titleLabel);
-
-    layout->addLayout(contentLayout);
-
     return card;
 }
 
@@ -69,176 +200,256 @@ void Homepage::setupUi() {
     auto *scrollArea = new QScrollArea;
     scrollArea->setWidgetResizable(true);
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scrollArea->setStyleSheet("QScrollArea { border: none; background: transparent; }");
+    scrollArea->setStyleSheet(
+        "QScrollArea { border: none; background: #1a1a2e; }"
+        "QScrollBar:vertical { background: #1a1a2e; width: 6px; }"
+        "QScrollBar::handle:vertical { background: #3a3a4e; border-radius: 3px; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }");
 
     auto *scrollWidget = new QWidget;
+    scrollWidget->setStyleSheet("background: #1a1a2e;");
     auto *mainLayout = new QVBoxLayout(scrollWidget);
     mainLayout->setSpacing(16);
-    mainLayout->setContentsMargins(20, 20, 20, 20);
+    mainLayout->setContentsMargins(24, 24, 24, 24);
 
     // Title
     auto *titleLabel = new QLabel("PANORAMA");
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(18);
+    titleFont.setPointSize(22);
     titleFont.setBold(true);
     titleLabel->setFont(titleFont);
-    titleLabel->setStyleSheet("color: #fff;");
+    titleLabel->setStyleSheet("color: #fff; background: transparent;");
     mainLayout->addWidget(titleLabel);
 
     auto *subtitleLabel = new QLabel("System Monitoring Dashboard");
-    subtitleLabel->setStyleSheet("color: #666; font-size: 12px; margin-bottom: 8px;");
+    subtitleLabel->setStyleSheet("color: #666; font-size: 12px; background: transparent; margin-bottom: 4px;");
     mainLayout->addWidget(subtitleLabel);
 
-    // Cards grid
+    // Cards grid: 2 rows x 3 columns conceptually
+    // Network spans rows 0-1, col 0
+    // CPU at (0,1), GPU at (0,2)
+    // Memory at (1,1), Disk at (1,2)
     auto *grid = new QGridLayout;
     grid->setSpacing(12);
+    grid->setColumnStretch(0, 3);
+    grid->setColumnStretch(1, 2);
+    grid->setColumnStretch(2, 2);
+    grid->setRowStretch(0, 1);
+    grid->setRowStretch(1, 1);
 
-    // --- CPU Card ---
+    // ========== Network Status Card (spans 2 rows, left) ==========
     {
-        auto *content = new QVBoxLayout;
-        content->setSpacing(6);
+        auto *card = createCard();
+        auto *layout = new QVBoxLayout(card);
+        layout->setSpacing(8);
+
+        auto *title = new QLabel("Network Status");
+        QFont tf = title->font();
+        tf.setPointSize(12);
+        tf.setBold(true);
+        title->setFont(tf);
+        title->setStyleSheet("color: #fff; border: none; background: transparent;");
+        layout->addWidget(title);
+
+        layout->addSpacing(4);
+
+        // Download section
+        downloadGraph_ = new GraphWidget(GRAPH_GREEN, this);
+        downloadGraph_->setMinimumHeight(80);
+        layout->addWidget(downloadGraph_);
+
+        netDownloadLabel_ = new QLabel("Download: 0 KB/s");
+        netDownloadLabel_->setStyleSheet("color: #55efc4; border: none; background: transparent; font-size: 12px;");
+        QFont dlFont = netDownloadLabel_->font();
+        dlFont.setBold(true);
+        netDownloadLabel_->setFont(dlFont);
+        layout->addWidget(netDownloadLabel_);
+
+        layout->addSpacing(8);
+
+        // Upload section
+        uploadGraph_ = new GraphWidget(GRAPH_BLUE, this);
+        uploadGraph_->setMinimumHeight(80);
+        layout->addWidget(uploadGraph_);
+
+        netUploadLabel_ = new QLabel("Upload: 0 KB/s");
+        netUploadLabel_->setStyleSheet("color: #74b9ff; border: none; background: transparent; font-size: 12px;");
+        QFont ulFont = netUploadLabel_->font();
+        ulFont.setBold(true);
+        netUploadLabel_->setFont(ulFont);
+        layout->addWidget(netUploadLabel_);
+
+        layout->addStretch();
+
+        grid->addWidget(card, 0, 0, 2, 1);
+    }
+
+    // ========== CPU Load Card (top middle) ==========
+    {
+        auto *card = createCard();
+        auto *layout = new QVBoxLayout(card);
+        layout->setSpacing(4);
+        layout->setAlignment(Qt::AlignCenter);
 
         cpuUsageLabel_ = new QLabel("0%");
         QFont bigFont = cpuUsageLabel_->font();
-        bigFont.setPointSize(28);
+        bigFont.setPointSize(24);
         bigFont.setBold(true);
         cpuUsageLabel_->setFont(bigFont);
-        cpuUsageLabel_->setStyleSheet("color: #fff; border: none; padding: 0;");
-        content->addWidget(cpuUsageLabel_);
+        cpuUsageLabel_->setStyleSheet("color: #fff; border: none; background: transparent;");
+        cpuUsageLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(cpuUsageLabel_);
 
-        cpuBar_ = new QProgressBar;
-        cpuBar_->setRange(0, 100);
-        cpuBar_->setValue(0);
-        cpuBar_->setTextVisible(false);
-        cpuBar_->setFixedHeight(8);
-        cpuBar_->setStyleSheet(BAR_STYLE);
-        content->addWidget(cpuBar_);
+        auto *subtitle = new QLabel("CPU Load");
+        subtitle->setStyleSheet("color: #aaa; border: none; background: transparent; font-size: 10px;");
+        subtitle->setAlignment(Qt::AlignCenter);
+        layout->addWidget(subtitle);
 
-        cpuTempLabel_ = new QLabel("Temperature: 0 C");
-        cpuTempLabel_->setStyleSheet("color: #aaa; border: none; padding: 0;");
-        content->addWidget(cpuTempLabel_);
+        layout->addSpacing(2);
 
-        grid->addWidget(createCard("CPU Load", content), 0, 0);
+        cpuGauge_ = new GaugeWidget(this);
+        cpuGauge_->setMinimumHeight(100);
+        layout->addWidget(cpuGauge_);
+
+        cpuTempLabel_ = new QLabel(QString::fromUtf8("\xF0\x9F\x8C\xA1 0\xC2\xB0""C"));
+        cpuTempLabel_->setStyleSheet("color: #fff; border: none; background: transparent; font-size: 12px;");
+        cpuTempLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(cpuTempLabel_);
+
+        grid->addWidget(card, 0, 1);
     }
 
-    // --- GPU Card ---
+    // ========== GPU Load Card (top right) ==========
     {
-        auto *content = new QVBoxLayout;
-        content->setSpacing(6);
+        auto *card = createCard();
+        auto *layout = new QVBoxLayout(card);
+        layout->setSpacing(4);
+        layout->setAlignment(Qt::AlignCenter);
 
         gpuUsageLabel_ = new QLabel("0%");
         QFont bigFont = gpuUsageLabel_->font();
-        bigFont.setPointSize(28);
+        bigFont.setPointSize(24);
         bigFont.setBold(true);
         gpuUsageLabel_->setFont(bigFont);
-        gpuUsageLabel_->setStyleSheet("color: #fff; border: none; padding: 0;");
-        content->addWidget(gpuUsageLabel_);
+        gpuUsageLabel_->setStyleSheet("color: #fff; border: none; background: transparent;");
+        gpuUsageLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(gpuUsageLabel_);
 
-        gpuBar_ = new QProgressBar;
-        gpuBar_->setRange(0, 100);
-        gpuBar_->setValue(0);
-        gpuBar_->setTextVisible(false);
-        gpuBar_->setFixedHeight(8);
-        gpuBar_->setStyleSheet(BAR_STYLE);
-        content->addWidget(gpuBar_);
+        auto *subtitle = new QLabel("GPU Load");
+        subtitle->setStyleSheet("color: #aaa; border: none; background: transparent; font-size: 10px;");
+        subtitle->setAlignment(Qt::AlignCenter);
+        layout->addWidget(subtitle);
 
-        gpuTempLabel_ = new QLabel("Temperature: 0 C");
-        gpuTempLabel_->setStyleSheet("color: #aaa; border: none; padding: 0;");
-        content->addWidget(gpuTempLabel_);
+        layout->addSpacing(2);
 
-        grid->addWidget(createCard("GPU Load", content), 0, 1);
+        gpuGauge_ = new GaugeWidget(this);
+        gpuGauge_->setMinimumHeight(100);
+        layout->addWidget(gpuGauge_);
+
+        gpuTempLabel_ = new QLabel(QString::fromUtf8("\xF0\x9F\x8C\xA1 0\xC2\xB0""C"));
+        gpuTempLabel_->setStyleSheet("color: #fff; border: none; background: transparent; font-size: 12px;");
+        gpuTempLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(gpuTempLabel_);
+
+        grid->addWidget(card, 0, 2);
     }
 
-    // --- Memory Card ---
+    // ========== Memory Load Card (bottom middle) ==========
     {
-        auto *content = new QVBoxLayout;
-        content->setSpacing(6);
+        auto *card = createCard();
+        auto *layout = new QVBoxLayout(card);
+        layout->setSpacing(6);
+        layout->setAlignment(Qt::AlignCenter);
 
         memUsageLabel_ = new QLabel("0%");
         QFont bigFont = memUsageLabel_->font();
-        bigFont.setPointSize(28);
+        bigFont.setPointSize(36);
         bigFont.setBold(true);
         memUsageLabel_->setFont(bigFont);
-        memUsageLabel_->setStyleSheet("color: #fff; border: none; padding: 0;");
-        content->addWidget(memUsageLabel_);
+        memUsageLabel_->setStyleSheet("color: #fff; border: none; background: transparent;");
+        memUsageLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(memUsageLabel_);
 
-        memBar_ = new QProgressBar;
-        memBar_->setRange(0, 100);
-        memBar_->setValue(0);
-        memBar_->setTextVisible(false);
-        memBar_->setFixedHeight(8);
-        memBar_->setStyleSheet(BAR_STYLE);
-        content->addWidget(memBar_);
+        auto *subtitle = new QLabel("Memory Load");
+        subtitle->setStyleSheet("color: #aaa; border: none; background: transparent; font-size: 11px;");
+        subtitle->setAlignment(Qt::AlignCenter);
+        layout->addWidget(subtitle);
 
-        memDetailLabel_ = new QLabel("0 GB / 0 GB");
-        memDetailLabel_->setStyleSheet("color: #aaa; border: none; padding: 0;");
-        content->addWidget(memDetailLabel_);
+        layout->addSpacing(8);
 
-        grid->addWidget(createCard("Memory Load", content), 1, 0);
+        // Progress bar container
+        memBar_ = new QFrame;
+        memBar_->setFixedHeight(12);
+        memBar_->setStyleSheet(
+            "QFrame { background: #1a1a2e; border-radius: 6px; border: none; }");
+
+        memBarFill_ = new QFrame(memBar_);
+        memBarFill_->setFixedHeight(12);
+        memBarFill_->setStyleSheet(
+            "QFrame { background: #DEF750; border-radius: 6px; border: none; }");
+        memBarFill_->setGeometry(0, 0, 0, 12);
+
+        layout->addWidget(memBar_);
+
+        layout->addSpacing(4);
+
+        memDetailLabel_ = new QLabel(QString::fromUtf8("\xF0\x9F\x92\xBE 0.0G / 0G"));
+        memDetailLabel_->setStyleSheet("color: #aaa; border: none; background: transparent; font-size: 12px;");
+        memDetailLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(memDetailLabel_);
+
+        layout->addStretch();
+
+        grid->addWidget(card, 1, 1);
     }
 
-    // --- Disk Card ---
+    // ========== Hard Disk Load Card (bottom right) ==========
     {
-        auto *content = new QVBoxLayout;
-        content->setSpacing(6);
+        auto *card = createCard();
+        auto *layout = new QVBoxLayout(card);
+        layout->setSpacing(6);
+        layout->setAlignment(Qt::AlignCenter);
 
         diskUsageLabel_ = new QLabel("0%");
         QFont bigFont = diskUsageLabel_->font();
-        bigFont.setPointSize(28);
+        bigFont.setPointSize(36);
         bigFont.setBold(true);
         diskUsageLabel_->setFont(bigFont);
-        diskUsageLabel_->setStyleSheet("color: #fff; border: none; padding: 0;");
-        content->addWidget(diskUsageLabel_);
+        diskUsageLabel_->setStyleSheet("color: #fff; border: none; background: transparent;");
+        diskUsageLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(diskUsageLabel_);
 
-        diskBar_ = new QProgressBar;
-        diskBar_->setRange(0, 100);
-        diskBar_->setValue(0);
-        diskBar_->setTextVisible(false);
-        diskBar_->setFixedHeight(8);
-        diskBar_->setStyleSheet(BAR_STYLE);
-        content->addWidget(diskBar_);
+        auto *subtitle = new QLabel("Hard disk Load");
+        subtitle->setStyleSheet("color: #aaa; border: none; background: transparent; font-size: 11px;");
+        subtitle->setAlignment(Qt::AlignCenter);
+        layout->addWidget(subtitle);
 
-        diskDetailLabel_ = new QLabel("0 GB / 0 GB");
-        diskDetailLabel_->setStyleSheet("color: #aaa; border: none; padding: 0;");
-        content->addWidget(diskDetailLabel_);
+        layout->addSpacing(8);
 
-        grid->addWidget(createCard("Hard Disk Load", content), 1, 1);
-    }
+        // Progress bar container
+        diskBar_ = new QFrame;
+        diskBar_->setFixedHeight(12);
+        diskBar_->setStyleSheet(
+            "QFrame { background: #1a1a2e; border-radius: 6px; border: none; }");
 
-    // --- Network Card (spans full width) ---
-    {
-        auto *content = new QHBoxLayout;
-        content->setSpacing(24);
+        diskBarFill_ = new QFrame(diskBar_);
+        diskBarFill_->setFixedHeight(12);
+        diskBarFill_->setStyleSheet(
+            "QFrame { background: #DEF750; border-radius: 6px; border: none; }");
+        diskBarFill_->setGeometry(0, 0, 0, 12);
 
-        auto *dlLayout = new QVBoxLayout;
-        auto *dlTitle = new QLabel("Download");
-        dlTitle->setStyleSheet("color: #888; border: none; padding: 0; font-size: 11px;");
-        dlLayout->addWidget(dlTitle);
-        netDownloadLabel_ = new QLabel("0 KB/s");
-        QFont netFont = netDownloadLabel_->font();
-        netFont.setPointSize(18);
-        netFont.setBold(true);
-        netDownloadLabel_->setFont(netFont);
-        netDownloadLabel_->setStyleSheet("color: #55efc4; border: none; padding: 0;");
-        dlLayout->addWidget(netDownloadLabel_);
-        content->addLayout(dlLayout);
+        layout->addWidget(diskBar_);
 
-        auto *ulLayout = new QVBoxLayout;
-        auto *ulTitle = new QLabel("Upload");
-        ulTitle->setStyleSheet("color: #888; border: none; padding: 0; font-size: 11px;");
-        ulLayout->addWidget(ulTitle);
-        netUploadLabel_ = new QLabel("0 KB/s");
-        QFont ulFont = netUploadLabel_->font();
-        ulFont.setPointSize(18);
-        ulFont.setBold(true);
-        netUploadLabel_->setFont(ulFont);
-        netUploadLabel_->setStyleSheet("color: #74b9ff; border: none; padding: 0;");
-        ulLayout->addWidget(netUploadLabel_);
-        content->addLayout(ulLayout);
+        layout->addSpacing(4);
 
-        content->addStretch();
+        diskDetailLabel_ = new QLabel(QString::fromUtf8("\xF0\x9F\x92\xBF 0G / 0G"));
+        diskDetailLabel_->setStyleSheet("color: #aaa; border: none; background: transparent; font-size: 12px;");
+        diskDetailLabel_->setAlignment(Qt::AlignCenter);
+        layout->addWidget(diskDetailLabel_);
 
-        grid->addWidget(createCard("Network Status", content), 2, 0, 1, 2);
+        layout->addStretch();
+
+        grid->addWidget(card, 1, 2);
     }
 
     mainLayout->addLayout(grid);
@@ -249,41 +460,55 @@ void Homepage::setupUi() {
 }
 
 void Homepage::onMetricsUpdated(const SystemMetrics &m) {
-    // CPU
-    int cpuUsage = static_cast<int>(m.cpu.usagePercent);
-    cpuUsageLabel_->setText(QString("%1%").arg(cpuUsage));
-    cpuBar_->setValue(cpuUsage);
-    cpuTempLabel_->setText(QString("Temperature: %1 C").arg(m.cpu.temperature, 0, 'f', 0));
-
-    // GPU
-    if (!m.gpus.isEmpty()) {
-        int gpuUsage = static_cast<int>(m.gpus[0].usagePercent);
-        gpuUsageLabel_->setText(QString("%1%").arg(gpuUsage));
-        gpuBar_->setValue(gpuUsage);
-        gpuTempLabel_->setText(QString("Temperature: %1 C").arg(m.gpus[0].temperature, 0, 'f', 0));
-    }
-
-    // Memory
-    int memUsage = static_cast<int>(m.ram.usagePercent);
-    memUsageLabel_->setText(QString("%1%").arg(memUsage));
-    memBar_->setValue(memUsage);
-    double usedGB = m.ram.usedMB / 1024.0;
-    double totalGB = m.ram.totalMB / 1024.0;
-    memDetailLabel_->setText(QString("%1 GB / %2 GB").arg(usedGB, 0, 'f', 1).arg(totalGB, 0, 'f', 0));
-
-    // Disk
-    int diskUsage = static_cast<int>(m.disk.usagePercent);
-    diskUsageLabel_->setText(QString("%1%").arg(diskUsage));
-    diskBar_->setValue(diskUsage);
-    diskDetailLabel_->setText(QString("%1 GB / %2 GB").arg(m.disk.usedGB).arg(m.disk.totalGB));
-
-    // Network
     auto formatSpeed = [](double kbs) -> QString {
         if (kbs >= 1024.0) {
             return QString("%1 MB/s").arg(kbs / 1024.0, 0, 'f', 1);
         }
         return QString("%1 KB/s").arg(kbs, 0, 'f', 0);
     };
-    netDownloadLabel_->setText(formatSpeed(m.net.rxSpeedKBs));
-    netUploadLabel_->setText(formatSpeed(m.net.txSpeedKBs));
+
+    // CPU
+    int cpuUsage = static_cast<int>(m.cpu.usagePercent);
+    cpuUsageLabel_->setText(QString("%1%").arg(cpuUsage));
+    cpuGauge_->setValue(m.cpu.usagePercent);
+    cpuTempLabel_->setText(QString::fromUtf8("\xF0\x9F\x8C\xA1 %1\xC2\xB0""C")
+                               .arg(m.cpu.temperature, 0, 'f', 0));
+
+    // GPU
+    if (!m.gpus.isEmpty()) {
+        int gpuUsage = static_cast<int>(m.gpus[0].usagePercent);
+        gpuUsageLabel_->setText(QString("%1%").arg(gpuUsage));
+        gpuGauge_->setValue(m.gpus[0].usagePercent);
+        gpuTempLabel_->setText(QString::fromUtf8("\xF0\x9F\x8C\xA1 %1\xC2\xB0""C")
+                                   .arg(m.gpus[0].temperature, 0, 'f', 0));
+    }
+
+    // Memory
+    int memUsage = static_cast<int>(m.ram.usagePercent);
+    memUsageLabel_->setText(QString("%1%").arg(memUsage));
+    double usedGB = m.ram.usedMB / 1024.0;
+    double totalGB = m.ram.totalMB / 1024.0;
+    memDetailLabel_->setText(QString::fromUtf8("\xF0\x9F\x92\xBE %1G / %2G")
+                                 .arg(usedGB, 0, 'f', 1)
+                                 .arg(totalGB, 0, 'f', 0));
+    // Update progress bar fill width
+    int barWidth = memBar_->width();
+    int fillWidth = static_cast<int>(barWidth * m.ram.usagePercent / 100.0);
+    memBarFill_->setGeometry(0, 0, fillWidth, 12);
+
+    // Disk
+    int diskUsage = static_cast<int>(m.disk.usagePercent);
+    diskUsageLabel_->setText(QString("%1%").arg(diskUsage));
+    diskDetailLabel_->setText(QString::fromUtf8("\xF0\x9F\x92\xBF %1G / %2G")
+                                  .arg(m.disk.usedGB)
+                                  .arg(m.disk.totalGB));
+    int diskBarWidth = diskBar_->width();
+    int diskFillWidth = static_cast<int>(diskBarWidth * m.disk.usagePercent / 100.0);
+    diskBarFill_->setGeometry(0, 0, diskFillWidth, 12);
+
+    // Network
+    netDownloadLabel_->setText(QString("Download: %1").arg(formatSpeed(m.net.rxSpeedKBs)));
+    netUploadLabel_->setText(QString("Upload: %1").arg(formatSpeed(m.net.txSpeedKBs)));
+    downloadGraph_->addValue(m.net.rxSpeedKBs);
+    uploadGraph_->addValue(m.net.txSpeedKBs);
 }

@@ -67,6 +67,7 @@ void MediaTile::setSelected(bool sel) {
 }
 
 void MediaTile::setThumbnail(const QPixmap &pix) {
+    thumb_ = pix;
     if (!pix.isNull()) {
         imageLabel_->setPixmap(pix.scaled(imageLabel_->size(),
                                           Qt::KeepAspectRatio,
