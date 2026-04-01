@@ -19,7 +19,7 @@
 static const int TILE_WIDTH = 200;
 static const int TILE_IMG_HEIGHT = 100;
 static const int GRID_COLUMNS = 3;
-static const QString THUMB_CACHE_DIR = "/tmp/reed-tpse/thumbnails";
+static const QString THUMB_CACHE_DIR = "/tmp/tryx-panorama/thumbnails";
 
 // --- MediaTile ---
 

@@ -2,13 +2,13 @@
 
 #include <string>
 
-namespace reed {
+namespace panorama {
 
 enum class MediaType { Unknown, Video, Gif, Image };
 
 class Media {
  public:
-  static constexpr const char* TMP_DIR = "/tmp/reed-tpse/";
+  static constexpr const char* TMP_DIR = "/tmp/tryx-panorama/";
 
   static MediaType detect_type(const std::string& path);
   static std::string get_extension(const std::string& path);
@@ -21,6 +21,11 @@ class Media {
                              const std::string& output);
   static bool needs_conversion(const std::string& path);
   static bool is_ffmpeg_available();
+
+ private:
+  static std::string quote_for_shell(const std::string& arg);
+  static bool run_ffmpeg(const std::string& args);
+  static std::string normalize_ext(const std::string& filepath);
 };
 
-}  // namespace reed
+}  // namespace panorama

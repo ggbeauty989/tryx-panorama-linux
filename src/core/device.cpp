@@ -1,4 +1,4 @@
-#include "reed/device.hpp"
+#include "panorama/device.hpp"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -13,7 +13,7 @@
 #include <iostream>
 #include <thread>
 
-namespace reed {
+namespace panorama {
 
 namespace {
 
@@ -521,4 +521,4 @@ std::optional<Response> Device::delete_media(
   return send_command("POST", "mediaDelete", content);
 }
 
-}  // namespace reed
+}  // namespace panorama

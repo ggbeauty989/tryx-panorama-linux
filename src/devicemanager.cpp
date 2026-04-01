@@ -18,7 +18,7 @@ void DeviceWorker::connectDevice(const QString &port) {
     std::string portStr;
 
     if (port.isEmpty()) {
-        auto detected = reed::Device::find_device();
+        auto detected = panorama::Device::find_device();
         if (!detected) {
             emit error("Устройство не найдено. Проверьте подключение USB.");
             return;
@@ -28,7 +28,7 @@ void DeviceWorker::connectDevice(const QString &port) {
         portStr = port.toStdString();
     }
 
-    device_ = std::make_unique<reed::Device>(portStr);
+    device_ = std::make_unique<panorama::Device>(portStr);
     if (!device_->connect()) {
         emit error(QString("Не удалось подключиться к %1").arg(QString::fromStdString(portStr)));
         device_.reset();
@@ -94,7 +94,7 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
         return;
     }
 
-    reed::ScreenConfig config;
+    panorama::ScreenConfig config;
     if (!presetId.isEmpty()) {
         config.preset_id = presetId.toStdString();
     }
@@ -220,9 +220,9 @@ void DeviceWorker::sendSysinfo(const QStringList &labels, const QStringList &val
         return;
     }
 
-    std::vector<reed::SysinfoData> data;
+    std::vector<panorama::SysinfoData> data;
     for (int i = 0; i < labels.size() && i < values.size() && i < units.size(); ++i) {
-        reed::SysinfoData item;
+        panorama::SysinfoData item;
         item.label = labels[i].toStdString();
         item.value = values[i].toStdString();
         item.unit = units[i].toStdString();
@@ -251,47 +251,47 @@ void DeviceWorker::deleteMedia(const QStringList &files) {
     }
 
     for (const auto &f : files) {
-        reed::Adb::remove(f.toStdString());
+        panorama::Adb::remove(f.toStdString());
     }
 
     emit mediaDeleted();
 }
 
 void DeviceWorker::uploadMedia(const QString &localPath) {
-    if (!reed::Adb::is_device_connected()) {
+    if (!panorama::Adb::is_device_connected()) {
         emit error("ADB устройство не найдено");
         return;
     }
 
     std::string path = localPath.toStdString();
-    auto type = reed::Media::detect_type(path);
+    auto type = panorama::Media::detect_type(path);
 
     std::string remoteName;
     std::string uploadPath = path;
 
-    if (reed::Media::needs_conversion(path)) {
-        remoteName = reed::Media::get_converted_name(path);
+    if (panorama::Media::needs_conversion(path)) {
+        remoteName = panorama::Media::get_converted_name(path);
     } else {
-        remoteName = reed::Media::get_filename(path);
+        remoteName = panorama::Media::get_filename(path);
     }
 
     // Check if file already exists on device - skip upload
-    if (reed::Adb::file_exists(remoteName)) {
+    if (panorama::Adb::file_exists(remoteName)) {
         emit mediaUploaded(QString::fromStdString(remoteName));
         return;
     }
 
     // Need to upload - convert if necessary
-    if (reed::Media::needs_conversion(path)) {
-        if (!reed::Media::is_ffmpeg_available()) {
+    if (panorama::Media::needs_conversion(path)) {
+        if (!panorama::Media::is_ffmpeg_available()) {
             emit error("ffmpeg not found. Install: sudo dnf install ffmpeg");
             return;
         }
         emit uploadProgress("Converting to MP4...");
-        std::string converted = std::string(reed::Media::TMP_DIR) + remoteName;
-        bool ok = (type == reed::MediaType::Gif)
-            ? reed::Media::convert_gif_to_mp4(path, converted)
-            : reed::Media::convert_to_mp4(path, converted);
+        std::string converted = std::string(panorama::Media::TMP_DIR) + remoteName;
+        bool ok = (type == panorama::MediaType::Gif)
+            ? panorama::Media::convert_gif_to_mp4(path, converted)
+            : panorama::Media::convert_to_mp4(path, converted);
         if (!ok) {
             emit error("Conversion to MP4 failed");
             return;
@@ -300,7 +300,7 @@ void DeviceWorker::uploadMedia(const QString &localPath) {
     }
 
     emit uploadProgress("Uploading to device...");
-    if (!reed::Adb::push(uploadPath, remoteName)) {
+    if (!panorama::Adb::push(uploadPath, remoteName)) {
         emit error("Upload to device failed");
         return;
     }
@@ -309,12 +309,12 @@ void DeviceWorker::uploadMedia(const QString &localPath) {
 }
 
 void DeviceWorker::refreshMediaList() {
-    if (!reed::Adb::is_device_connected()) {
+    if (!panorama::Adb::is_device_connected()) {
         emit error("ADB устройство не найдено");
         return;
     }
 
-    auto files = reed::Adb::list_media();
+    auto files = panorama::Adb::list_media();
     if (!files) {
         emit error("Не удалось получить список файлов");
         return;

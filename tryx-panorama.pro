@@ -12,7 +12,7 @@ OBJECTS_DIR = $$PWD/build/obj
 MOC_DIR = $$PWD/build/moc
 RCC_DIR = $$PWD/build/rcc
 
-# Core library (reed protocol)
+# Core library
 SOURCES += \
     src/core/protocol.cpp \
     src/core/device.cpp \

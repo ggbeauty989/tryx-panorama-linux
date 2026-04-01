@@ -1,158 +1,164 @@
-#include "reed/protocol.hpp"
+#include "panorama/protocol.hpp"
 
+#include <algorithm>
+#include <numeric>
 #include <sstream>
 
-namespace reed {
+namespace panorama {
 
 uint8_t calculate_crc(const std::vector<uint8_t>& data) {
-  uint32_t sum = 0;
-  for (uint8_t b : data) {
-    sum += b;
-  }
-  return static_cast<uint8_t>(sum & 0xFF);
+  // Accumulate all byte values, then truncate to the lowest 8 bits
+  unsigned int total = std::accumulate(data.begin(), data.end(), 0u);
+  return static_cast<uint8_t>(total & 0xFF);
 }
 
 std::vector<uint8_t> escape_data(const std::vector<uint8_t>& data) {
-  std::vector<uint8_t> result;
-  result.reserve(data.size() * 2);
+  std::vector<uint8_t> output;
+  output.reserve(data.size() * 2);  // worst case: every byte needs escaping
 
-  for (uint8_t b : data) {
-    if (b == 0x5A) {
-      result.push_back(0x5B);
-      result.push_back(0x01);
-    } else if (b == 0x5B) {
-      result.push_back(0x5B);
-      result.push_back(0x02);
-    } else {
-      result.push_back(b);
+  for (auto it = data.begin(); it != data.end(); ++it) {
+    switch (*it) {
+      case FRAME_MARKER:
+        output.push_back(ESCAPE_MARKER);
+        output.push_back(0x01);
+        break;
+      case ESCAPE_MARKER:
+        output.push_back(ESCAPE_MARKER);
+        output.push_back(0x02);
+        break;
+      default:
+        output.push_back(*it);
+        break;
     }
   }
 
-  return result;
+  return output;
 }
 
 std::vector<uint8_t> unescape_data(const std::vector<uint8_t>& data) {
-  std::vector<uint8_t> result;
-  result.reserve(data.size());
+  std::vector<uint8_t> output;
+  output.reserve(data.size());
 
-  for (size_t i = 0; i < data.size(); ++i) {
-    if (data[i] == 0x5B && i + 1 < data.size()) {
-      if (data[i + 1] == 0x01) {
-        result.push_back(0x5A);
-        ++i;
-      } else if (data[i + 1] == 0x02) {
-        result.push_back(0x5B);
-        ++i;
-      } else {
-        result.push_back(data[i]);
+  size_t pos = 0;
+  while (pos < data.size()) {
+    if (data[pos] == ESCAPE_MARKER && pos + 1 < data.size()) {
+      uint8_t next_byte = data[pos + 1];
+      if (next_byte == 0x01) {
+        output.push_back(FRAME_MARKER);
+        pos += 2;
+        continue;
       }
-    } else {
-      result.push_back(data[i]);
+      if (next_byte == 0x02) {
+        output.push_back(ESCAPE_MARKER);
+        pos += 2;
+        continue;
+      }
     }
+    output.push_back(data[pos]);
+    ++pos;
   }
 
-  return result;
+  return output;
 }
 
 std::vector<uint8_t> build_frame(const std::string& request_state,
                                  const std::string& cmd_type,
                                  const std::string& content,
                                  const std::string& version, int ack_number) {
-  std::ostringstream body;
+  // Compose the text portion: request line, headers, blank line, payload
+  std::string request_line =
+      request_state + " " + cmd_type + " " + version + "\r\n";
 
-  // First line: REQUEST_STATE CMD_TYPE VERSION
-  body << request_state << " " << cmd_type << " " << version << "\r\n";
+  std::string headers;
+  headers += "ContentType=json\r\n";
+  headers += "ContentLength=" + std::to_string(content.size()) + "\r\n";
+  headers += "AckNumber=" + std::to_string(ack_number) + "\r\n";
 
-  // Headers
-  body << "ContentType=json\r\n";
-  body << "ContentLength=" << content.size() << "\r\n";
-  body << "AckNumber=" << ack_number << "\r\n";
+  std::string text_payload = request_line + headers + "\r\n" + content;
 
-  // Double CRLF separator + content
-  body << "\r\n" << content;
+  // Wire length includes the text plus 5 bytes of framing overhead
+  uint16_t wire_length = static_cast<uint16_t>(text_payload.size() + 5);
 
-  std::string message_body = body.str();
+  // Pack length (big-endian) followed by the message text
+  std::vector<uint8_t> raw_packet;
+  raw_packet.reserve(2 + text_payload.size() + 1);
+  raw_packet.push_back(static_cast<uint8_t>(wire_length >> 8));
+  raw_packet.push_back(static_cast<uint8_t>(wire_length & 0xFF));
 
-  // Total length = message length + 5 (overhead)
-  uint16_t total_length = static_cast<uint16_t>(message_body.size() + 5);
+  std::transform(text_payload.begin(), text_payload.end(),
+                 std::back_inserter(raw_packet),
+                 [](char ch) { return static_cast<uint8_t>(ch); });
 
-  // Build data: length (2 bytes BE) + message
-  std::vector<uint8_t> data_with_length;
-  data_with_length.push_back(static_cast<uint8_t>((total_length >> 8) & 0xFF));
-  data_with_length.push_back(static_cast<uint8_t>(total_length & 0xFF));
+  // Append checksum byte
+  raw_packet.push_back(calculate_crc(raw_packet));
 
-  for (char c : message_body) {
-    data_with_length.push_back(static_cast<uint8_t>(c));
-  }
+  // Apply byte-stuffing to protect sentinel values inside the payload
+  std::vector<uint8_t> stuffed = escape_data(raw_packet);
 
-  // Add CRC
-  uint8_t crc = calculate_crc(data_with_length);
-  data_with_length.push_back(crc);
+  // Wrap with start and end frame markers
+  std::vector<uint8_t> wire_frame;
+  wire_frame.reserve(stuffed.size() + 2);
+  wire_frame.push_back(FRAME_MARKER);
+  wire_frame.insert(wire_frame.end(), stuffed.begin(), stuffed.end());
+  wire_frame.push_back(FRAME_MARKER);
 
-  // Escape special bytes
-  std::vector<uint8_t> escaped = escape_data(data_with_length);
-
-  // Add frame markers
-  std::vector<uint8_t> frame;
-  frame.reserve(escaped.size() + 2);
-  frame.push_back(FRAME_MARKER);
-  frame.insert(frame.end(), escaped.begin(), escaped.end());
-  frame.push_back(FRAME_MARKER);
-
-  return frame;
+  return wire_frame;
 }
 
 std::optional<Response> parse_response(const std::vector<uint8_t>& data) {
+  // Minimum viable frame: marker + at least 2 inner bytes + marker
   if (data.size() < 4) {
     return std::nullopt;
   }
 
-  // Check frame markers
+  // Verify both boundary markers are present
   if (data.front() != FRAME_MARKER || data.back() != FRAME_MARKER) {
     return std::nullopt;
   }
 
-  // Unescape payload (between markers)
-  std::vector<uint8_t> payload(data.begin() + 1, data.end() - 1);
-  payload = unescape_data(payload);
+  // Strip markers and reverse the byte-stuffing
+  std::vector<uint8_t> inner(data.begin() + 1, data.end() - 1);
+  std::vector<uint8_t> decoded = unescape_data(inner);
 
-  if (payload.size() < 3) {
+  // Need at least 2 bytes for length + 1 byte for CRC
+  if (decoded.size() < 3) {
     return std::nullopt;
   }
 
-  // Skip length (2 bytes) and CRC (1 byte at end)
-  std::string message(payload.begin() + 2, payload.end() - 1);
+  // Extract the message text between the length prefix and the trailing CRC
+  std::string msg_text(decoded.begin() + 2, decoded.end() - 1);
 
-  Response response;
-  response.raw = message;
+  Response resp;
+  resp.raw = msg_text;
 
-  // Split headers and body
-  size_t separator = message.find("\r\n\r\n");
-  if (separator != std::string::npos) {
-    std::string header_part = message.substr(0, separator);
-    response.body = message.substr(separator + 4);
+  // Locate the header/body boundary (double CRLF)
+  const std::string delimiter = "\r\n\r\n";
+  auto boundary_pos = msg_text.find(delimiter);
 
-    // Try to parse body as JSON
-    if (!response.body.empty()) {
-      picojson::value v;
-      std::string err = picojson::parse(v, response.body);
-      if (err.empty()) {
-        response.json = v;
+  if (boundary_pos != std::string::npos) {
+    std::string header_block = msg_text.substr(0, boundary_pos);
+    resp.body = msg_text.substr(boundary_pos + delimiter.size());
+
+    // Attempt JSON deserialization of the body
+    if (!resp.body.empty()) {
+      picojson::value parsed_val;
+      std::string parse_err = picojson::parse(parsed_val, resp.body);
+      if (parse_err.empty()) {
+        resp.json = std::move(parsed_val);
       }
     }
 
-    // Parse first line
-    size_t first_line_end = header_part.find("\r\n");
-    std::string first_line = (first_line_end != std::string::npos)
-                                 ? header_part.substr(0, first_line_end)
-                                 : header_part;
+    // The first line of the header block carries version and status
+    auto first_newline = header_block.find("\r\n");
+    std::string status_line = (first_newline != std::string::npos)
+                                  ? header_block.substr(0, first_newline)
+                                  : header_block;
 
-    // Extract version and status from first line
-    std::istringstream iss(first_line);
-    iss >> response.version >> response.status;
+    std::istringstream tokenizer(status_line);
+    tokenizer >> resp.version >> resp.status;
   }
 
-  return response;
+  return resp;
 }
 
-}  // namespace reed
+}  // namespace panorama
