@@ -1,7 +1,9 @@
 # TRYX Panorama SE 360 - Linux GUI Manager
 
 Qt6 GUI application for managing the TRYX Panorama SE 360 AIO cooler display on Linux.
-
+<div align="center"> 
+https://github.com/user-attachments/assets/f9baac04-fe28-4aeb-a8ea-eb2af37ff6cb
++</div>
 ## What was done
 
 - Unpacking KANALI (official Windows app) resources to extract built-in media library (15 videos)
@@ -65,7 +67,7 @@ src/
   devicemanager.*    # Async device communication
   systemmonitor.*    # System metrics reader
   traymanager.*      # System tray
-include/reed/        # Protocol headers
+include/panorama/    # Protocol headers
 media/               # Built-in videos
 ```
 
@@ -73,7 +75,7 @@ media/               # Built-in videos
 
 | Distro | Kernel | CPU | GPU1 | GPU2 |
 |--------|--------|-----|------|------|
-| Fedora 43 | 6.19.9 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
+| Fedora 43 | 6.19.10 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
 
 ## License
 
