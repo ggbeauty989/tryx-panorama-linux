@@ -1,6 +1,15 @@
-# TRYX Panorama SE 360 - Linux GUI Manager
+# TRYX Panorama Linux GUI
 
-Qt6 GUI application for managing the TRYX Panorama SE 360 AIO cooler display on Linux.
+Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
+
+## Supported Models
+
+| Model | Status |
+|-------|--------|
+| Panorama SE 360 | Tested |
+| Panorama SE 240 | Should work (same display protocol) |
+| Panorama | Should work |
+| Panorama WB | Should work |
 
 <div align="center">
 
@@ -51,8 +60,8 @@ https://github.com/user-attachments/assets/f9baac04-fe28-4aeb-a8ea-eb2af37ff6cb
 ## Build
 
 ```bash
-git clone https://github.com/DXVSI/tryx-panorama-se-360-linux-gui.git
-cd tryx-panorama-se-360-linux-gui
+git clone https://gitlab.com/dxvsi/tryx-panorama-linux.git
+cd tryx-panorama-linux
 qmake6
 make -j$(nproc)
 ./build/tryx-panorama-manager
