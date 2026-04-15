@@ -1,4 +1,4 @@
-#include "reed/device.hpp"
+#include "panorama/device.hpp"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -13,7 +13,7 @@
 #include <iostream>
 #include <thread>
 
-namespace reed {
+namespace panorama {
 
 namespace {
 
@@ -316,31 +316,25 @@ std::optional<DeviceInfo> Device::handshake() {
 std::optional<Response> Device::set_screen_config(const ScreenConfig& config) {
   std::string content;
 
-  // Build filter object
-  picojson::object filter;
-  filter["value"] = picojson::value("");
-  filter["opacity"] = picojson::value(
-      static_cast<double>(config.settings.filter_opacity));
+  // Helper: build a single DisplaySettings into a picojson object
+  auto build_settings = [](const DisplaySettings& ds) -> picojson::object {
+    picojson::object filter;
+    filter["value"] = picojson::value("");
+    filter["opacity"] = picojson::value(static_cast<double>(ds.filter_opacity));
 
-  // Build badges array
-  picojson::array badges_arr;
-  for (const auto& b : config.settings.badges) {
-    badges_arr.push_back(picojson::value(b));
-  }
+    picojson::array badges_arr;
+    for (const auto& b : ds.badges) {
+      badges_arr.push_back(picojson::value(b));
+    }
 
-  // Build settings object
-  picojson::object settings;
-  settings["position"] = picojson::value(config.settings.position);
-  settings["color"] = picojson::value(config.settings.color);
-  settings["align"] = picojson::value(config.settings.align);
-  settings["filter"] = picojson::value(filter);
-  settings["badges"] = picojson::value(badges_arr);
-
-  // Build sysinfoDisplay array
-  picojson::array sysinfo_arr;
-  for (const auto& label : config.sysinfo_display) {
-    sysinfo_arr.push_back(picojson::value(label));
-  }
+    picojson::object settings;
+    settings["position"] = picojson::value(ds.position);
+    settings["color"] = picojson::value(ds.color);
+    settings["align"] = picojson::value(ds.align);
+    settings["filter"] = picojson::value(filter);
+    settings["badges"] = picojson::value(badges_arr);
+    return settings;
+  };
 
   // Build media array
   picojson::array media_arr;
@@ -351,11 +345,9 @@ std::optional<Response> Device::set_screen_config(const ScreenConfig& config) {
   // Build config object
   picojson::object cfg;
   if (!config.preset_id.empty()) {
-    // Preset mode
     cfg["Type"] = picojson::value("Pre-set");
     cfg["id"] = picojson::value(config.preset_id);
   } else {
-    // Custom mode
     cfg["Type"] = picojson::value("Custom");
     cfg["id"] = picojson::value("Customization");
     cfg["media"] = picojson::value(media_arr);
@@ -363,8 +355,40 @@ std::optional<Response> Device::set_screen_config(const ScreenConfig& config) {
   cfg["screenMode"] = picojson::value(config.screen_mode);
   cfg["ratio"] = picojson::value(config.ratio);
   cfg["playMode"] = picojson::value(config.play_mode);
-  cfg["settings"] = picojson::value(settings);
-  cfg["sysinfoDisplay"] = picojson::value(sysinfo_arr);
+
+  if (config.screen_mode == "Screen Splitting") {
+    // Settings as JSON array of 2 objects
+    picojson::array settings_arr;
+    settings_arr.push_back(picojson::value(build_settings(config.settings)));
+    settings_arr.push_back(picojson::value(build_settings(config.settings2)));
+    cfg["settings"] = picojson::value(settings_arr);
+
+    // sysinfoDisplay as JSON array of 2 arrays
+    picojson::array sysinfo_outer;
+
+    picojson::array sysinfo_left;
+    for (const auto& label : config.sysinfo_display) {
+      sysinfo_left.push_back(picojson::value(label));
+    }
+    sysinfo_outer.push_back(picojson::value(sysinfo_left));
+
+    picojson::array sysinfo_right;
+    for (const auto& label : config.sysinfo_display2) {
+      sysinfo_right.push_back(picojson::value(label));
+    }
+    sysinfo_outer.push_back(picojson::value(sysinfo_right));
+
+    cfg["sysinfoDisplay"] = picojson::value(sysinfo_outer);
+  } else {
+    // Full Screen: single settings object, single sysinfo array
+    cfg["settings"] = picojson::value(build_settings(config.settings));
+
+    picojson::array sysinfo_arr;
+    for (const auto& label : config.sysinfo_display) {
+      sysinfo_arr.push_back(picojson::value(label));
+    }
+    cfg["sysinfoDisplay"] = picojson::value(sysinfo_arr);
+  }
 
   content = picojson::value(cfg).serialize();
 
@@ -373,7 +397,13 @@ std::optional<Response> Device::set_screen_config(const ScreenConfig& config) {
   // Send twice - device requires this to apply config reliably
   send_command("POST", "waterBlockScreenId", content);
   std::this_thread::sleep_for(std::chrono::milliseconds(200));
-  return send_command("POST", "waterBlockScreenId", content);
+  auto result = send_command("POST", "waterBlockScreenId", content);
+
+  // Send waterfall mode command based on config
+  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  set_waterfall_mode(config.waterfall_mode);
+
+  return result;
 }
 
 std::optional<Response> Device::set_sysinfo_display(const ScreenConfig& config) {
@@ -400,17 +430,105 @@ std::optional<Response> Device::set_temperature_unit(const std::string& unit) {
 }
 
 std::optional<Response> Device::send_config(const std::string& cpu_name, const std::string& gpu_name, const std::string& temp_unit) {
-  // Set temperature unit
+  // Send spec via "POST spec"
+  {
+    picojson::object spec;
+    spec["cpu"] = picojson::value(cpu_name);
+    spec["gpu"] = picojson::value(gpu_name);
+    std::string specContent = picojson::value(spec).serialize();
+    std::cerr << "[spec] " << specContent << "\n";
+    send_command("POST", "spec", specContent, true);
+  }
+
+  // Send temperature unit
   set_temperature_unit(temp_unit);
 
-  // Send spec with CPU/GPU names for badges via "POST spec"
+  return {};
+}
+
+std::optional<Response> Device::send_full_config(
+    const ScreenConfig& config,
+    const std::string& cpu_name,
+    const std::string& gpu_name,
+    int brightness,
+    const std::string& temp_unit) {
+
+  // Build full config JSON matching KANALI format
+  picojson::object root;
+  root["temperature"] = picojson::value(temp_unit);
+
+  // waterBlockScreen object
+  picojson::object wbs;
+  wbs["enable"] = picojson::value(true);
+  wbs["displayInSleep"] = picojson::value(false);
+  wbs["brightness"] = picojson::value(static_cast<double>(brightness));
+  wbs["waterfallMode"] = picojson::value(config.waterfall_mode);
+
+  // Embed screen config as "id"
+  auto build_settings = [](const DisplaySettings& ds) -> picojson::object {
+    picojson::object filter;
+    filter["value"] = picojson::value("");
+    filter["opacity"] = picojson::value(static_cast<double>(ds.filter_opacity));
+    picojson::array badges_arr;
+    for (const auto& b : ds.badges)
+      badges_arr.push_back(picojson::value(b));
+    picojson::object s;
+    s["position"] = picojson::value(ds.position);
+    s["color"] = picojson::value(ds.color);
+    s["align"] = picojson::value(ds.align);
+    s["filter"] = picojson::value(filter);
+    s["badges"] = picojson::value(badges_arr);
+    return s;
+  };
+
+  picojson::object screenCfg;
+  screenCfg["Type"] = picojson::value(config.preset_id.empty() ? "Custom" : "Pre-set");
+  screenCfg["id"] = picojson::value(config.preset_id.empty() ? "Customization" : config.preset_id);
+  screenCfg["screenMode"] = picojson::value(config.screen_mode);
+  screenCfg["ratio"] = picojson::value(config.ratio);
+  screenCfg["playMode"] = picojson::value(config.play_mode);
+
+  picojson::array media_arr;
+  for (const auto& m : config.media)
+    media_arr.push_back(picojson::value(m));
+  screenCfg["media"] = picojson::value(media_arr);
+
+  if (config.screen_mode == "Screen Splitting") {
+    picojson::array settings_arr;
+    settings_arr.push_back(picojson::value(build_settings(config.settings)));
+    settings_arr.push_back(picojson::value(build_settings(config.settings2)));
+    screenCfg["settings"] = picojson::value(settings_arr);
+
+    picojson::array sysinfo_outer;
+    picojson::array left, right;
+    for (const auto& l : config.sysinfo_display)
+      left.push_back(picojson::value(l));
+    for (const auto& r : config.sysinfo_display2)
+      right.push_back(picojson::value(r));
+    sysinfo_outer.push_back(picojson::value(left));
+    sysinfo_outer.push_back(picojson::value(right));
+    screenCfg["sysinfoDisplay"] = picojson::value(sysinfo_outer);
+  } else {
+    screenCfg["settings"] = picojson::value(build_settings(config.settings));
+    picojson::array sysinfo_arr;
+    for (const auto& l : config.sysinfo_display)
+      sysinfo_arr.push_back(picojson::value(l));
+    screenCfg["sysinfoDisplay"] = picojson::value(sysinfo_arr);
+  }
+
+  wbs["id"] = picojson::value(screenCfg);
+  root["waterBlockScreen"] = picojson::value(wbs);
+
+  // spec
   picojson::object spec;
   spec["cpu"] = picojson::value(cpu_name);
   spec["gpu"] = picojson::value(gpu_name);
+  root["spec"] = picojson::value(spec);
 
-  std::string content = picojson::value(spec).serialize();
-  std::cerr << "[spec] " << content << "\n";
-  return send_command("POST", "spec", content, true);
+  std::string content = picojson::value(root).serialize();
+  std::cerr << "[full_config] " << content.substr(0, 200) << "...\n";
+
+  return send_command("POST", "config", content);
 }
 
 std::optional<Response> Device::send_sysinfo(
@@ -502,6 +620,25 @@ std::optional<Response> Device::send_sysinfo(
   return send_command("POST", "all", content, false);
 }
 
+std::optional<Response> Device::set_waterfall_mode(bool enable) {
+  picojson::object obj;
+  obj["enable"] = picojson::value(enable);
+  std::string content = picojson::value(obj).serialize();
+  std::cerr << "[waterfallMode] " << content << "\n";
+  return send_command("POST", "waterfallMode", content);
+}
+
+std::optional<Response> Device::set_rotation(int degrees) {
+  picojson::object obj;
+  obj["degree"] = picojson::value(static_cast<double>(degrees));
+  std::string content = picojson::value(obj).serialize();
+  return send_command("POST", "rotate", content);
+}
+
+std::optional<Response> Device::reboot() {
+  return send_command("POST", "reboot", "");
+}
+
 std::optional<Response> Device::set_brightness(int value) {
   picojson::object obj;
   obj["value"] = picojson::value(static_cast<double>(value));
@@ -521,4 +658,4 @@ std::optional<Response> Device::delete_media(
   return send_command("POST", "mediaDelete", content);
 }
 
-}  // namespace reed
+}  // namespace panorama

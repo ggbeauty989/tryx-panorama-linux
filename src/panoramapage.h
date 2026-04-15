@@ -18,8 +18,17 @@
 #include <QTabBar>
 #include <QMap>
 #include <QSettings>
+#include <QToolButton>
+#include <QMenu>
+#include <QWidgetAction>
 
+#include <QRadioButton>
+#include <QMediaPlayer>
+#include <QVideoSink>
+#include <QVideoFrame>
+#include <QAudioOutput>
 #include "systemmonitor.h"
+#include "splitconfig.h"
 
 class DeviceManager;
 
@@ -61,6 +70,9 @@ private slots:
     void onMediaUploaded(const QString &filename);
     void onMediaDeleted();
     void onUploadStatus(const QString &status);
+    void onScreenModeChanged();
+    void onCustomSave();
+    void onFileListContextMenu(const QPoint &pos);
 
     // Display settings
     void onBrightnessChanged(int value);
@@ -78,6 +90,9 @@ private:
     void applyScreenConfig();
     void savePageState();
     void restorePageState();
+
+    void rebuildPresetGrid();
+    int calculateGridColumns() const;
 
     static QString builtinMediaDir();
     static QString presetIdForName(const QString &name);
@@ -97,6 +112,11 @@ private:
     QGridLayout *presetGrid_;
     QList<MediaTile *> presetTiles_;
     MediaTile *selectedPresetTile_ = nullptr;
+
+    // Preview
+    QLabel *previewLabel_ = nullptr;
+    QMediaPlayer *previewPlayer_ = nullptr;
+    QVideoSink *previewSink_ = nullptr;
 
     // Pre-set tab - sysinfo display
     struct MetricOption {
@@ -130,6 +150,16 @@ private:
     QLabel *dropZone_;
     QProgressBar *progressBar_;
 
+    // Customization tab - Screen Splitting
+    QRadioButton *fullScreenRadio_;
+    QRadioButton *splitScreenRadio_;
+    QWidget *fullScreenControls_;
+    SplitConfigWidget *splitConfigWidget_;
+    QPushButton *customSaveBtn_;
+    QToolButton *customMetricsBtn_;
+    QMenu *customMetricsMenu_;
+    QList<QCheckBox *> customMetricCheckboxes_;
+
     // Customization tab - user media grid
     QScrollArea *customScrollArea_;
     QWidget *customGridWidget_;
@@ -145,4 +175,5 @@ private:
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 };

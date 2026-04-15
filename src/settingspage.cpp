@@ -9,7 +9,7 @@
 #include <QDir>
 #include <QProcess>
 
-#include <reed/config.hpp>
+#include <panorama/config.hpp>
 
 SettingsPage::SettingsPage(DeviceManager *deviceMgr, QWidget *parent)
     : QWidget(parent), deviceMgr_(deviceMgr) {
@@ -93,7 +93,7 @@ void SettingsPage::setupUi() {
 }
 
 void SettingsPage::loadSettings() {
-    auto config = reed::ConfigManager::load_config();
+    auto config = panorama::ConfigManager::load_config();
     if (config) {
         if (!config->port.empty()) {
             portCombo_->setCurrentText(QString::fromStdString(config->port));
@@ -157,12 +157,12 @@ void SettingsPage::onResetSettings() {
 }
 
 void SettingsPage::onSaveSettings() {
-    reed::Config config;
+    panorama::Config config;
     config.port = selectedPort().toStdString();
     config.keepalive_interval = keepaliveSpin_->value();
     config.brightness = 75;
 
-    reed::ConfigManager::save_config(config);
+    panorama::ConfigManager::save_config(config);
 
     // Handle autostart
     if (cbAutostart_->isChecked()) {

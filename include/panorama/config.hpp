@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace reed {
+namespace panorama {
 
 struct Config {
   std::string port;  // Empty = auto-detect
@@ -32,6 +32,13 @@ class ConfigManager {
 
   static std::optional<DisplayState> load_state();
   static bool save_state(const DisplayState& state);
+
+ private:
+  static std::string resolve_xdg_path(const char* env_var,
+                                       const char* fallback_suffix);
+  static std::string read_file_contents(const std::string& filepath);
+  static bool write_json_file(const std::string& filepath,
+                              const std::string& json_text);
 };
 
-}  // namespace reed
+}  // namespace panorama

@@ -1,4 +1,4 @@
-QT += core gui widgets
+QT += core gui widgets multimedia
 
 CONFIG += c++17
 TARGET = tryx-panorama-manager
@@ -12,7 +12,7 @@ OBJECTS_DIR = $$PWD/build/obj
 MOC_DIR = $$PWD/build/moc
 RCC_DIR = $$PWD/build/rcc
 
-# Core library (reed protocol)
+# Core library
 SOURCES += \
     src/core/protocol.cpp \
     src/core/device.cpp \
@@ -29,7 +29,8 @@ HEADERS += \
     src/displaypage.h \
     src/settingspage.h \
     src/traymanager.h \
-    src/mainwindow.h
+    src/mainwindow.h \
+    src/splitconfig.h
 
 SOURCES += \
     src/main.cpp \
@@ -40,6 +41,7 @@ SOURCES += \
     src/displaypage.cpp \
     src/settingspage.cpp \
     src/traymanager.cpp \
-    src/mainwindow.cpp
+    src/mainwindow.cpp \
+    src/splitconfig.cpp
 
 RESOURCES += resources/resources.qrc

@@ -6,7 +6,7 @@
 
 #include "protocol.hpp"
 
-namespace reed {
+namespace panorama {
 
 struct DeviceInfo {
   std::string product_id;
@@ -34,6 +34,11 @@ struct ScreenConfig {
   std::string play_mode = "Single";
   std::vector<std::string> sysinfo_display; // max 3 labels
   DisplaySettings settings;
+
+  // For Screen Splitting mode
+  DisplaySettings settings2;
+  std::vector<std::string> sysinfo_display2;
+  bool waterfall_mode = false;
 };
 
 struct SysinfoData {
@@ -68,7 +73,11 @@ class Device {
   std::optional<Response> set_sysinfo_display(const ScreenConfig& config);
   std::optional<Response> set_temperature_unit(const std::string& unit = "Celsius");
   std::optional<Response> send_config(const std::string& cpu_name, const std::string& gpu_name, const std::string& temp_unit = "Celsius");
+  std::optional<Response> send_full_config(const ScreenConfig& config, const std::string& cpu_name, const std::string& gpu_name, int brightness = 75, const std::string& temp_unit = "Celsius");
   std::optional<Response> set_brightness(int value);
+  std::optional<Response> set_rotation(int degrees);
+  std::optional<Response> reboot();
+  std::optional<Response> set_waterfall_mode(bool enable);
   std::optional<Response> delete_media(const std::vector<std::string>& files);
   std::optional<Response> send_sysinfo(const std::vector<SysinfoData>& data);
 
@@ -81,4 +90,4 @@ class Device {
   std::vector<uint8_t> read_response(int timeout_ms = 1000);
 };
 
-}  // namespace reed
+}  // namespace panorama

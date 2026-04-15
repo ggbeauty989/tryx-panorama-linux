@@ -11,6 +11,7 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QMenu>
 #include <QMessageBox>
 #include <QDir>
 #include <QFileInfo>
@@ -18,14 +19,14 @@
 #include <QProcess>
 #include <QPixmap>
 #include <QMouseEvent>
+#include <QResizeEvent>
 #include <QFont>
 #include <QSettings>
 #include <memory>
 
-static const int TILE_WIDTH = 200;
-static const int TILE_IMG_HEIGHT = 100;
-static const int GRID_COLUMNS = 3;
-static const QString THUMB_CACHE_DIR = "/tmp/reed-tpse/thumbnails";
+static const int TILE_WIDTH = 250;
+static const int TILE_IMG_HEIGHT = 140;
+static const QString THUMB_CACHE_DIR = "/tmp/tryx-panorama/thumbnails";
 
 // Mapping from built-in video base names to device preset IDs
 static const QMap<QString, QString> PRESET_MAP = {
@@ -191,19 +192,37 @@ void PanoramaPage::setupPresetTab(QWidget *parent) {
     mediaLabel->setStyleSheet("color: #fff;");
     layout->addWidget(mediaLabel);
 
-    presetScrollArea_ = new QScrollArea;
-    presetScrollArea_->setWidgetResizable(true);
-    presetScrollArea_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    presetScrollArea_->setMinimumHeight(200);
-    presetScrollArea_->setMaximumHeight(360);
-    presetScrollArea_->setStyleSheet("QScrollArea { border: none; }");
+    // Video preview via QVideoSink -> QLabel (no native window, works on Wayland)
+    previewLabel_ = new QLabel;
+    previewLabel_->setFixedSize(420, 200);
+    previewLabel_->setAlignment(Qt::AlignCenter);
+    previewLabel_->setStyleSheet("background: #000; border-radius: 8px; border: none;");
+    previewLabel_->hide();
+    layout->addWidget(previewLabel_, 0, Qt::AlignCenter);
+
+    auto *previewAudio = new QAudioOutput(this);
+    previewAudio->setVolume(0);
+    previewPlayer_ = new QMediaPlayer(this);
+    previewPlayer_->setAudioOutput(previewAudio);
+    previewSink_ = new QVideoSink(this);
+    previewPlayer_->setVideoOutput(previewSink_);
+    connect(previewSink_, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
+        QVideoFrame f = frame;
+        if (f.map(QVideoFrame::ReadOnly)) {
+            QImage img = f.toImage();
+            f.unmap();
+            if (!img.isNull()) {
+                previewLabel_->setPixmap(QPixmap::fromImage(
+                    img.scaled(previewLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+            }
+        }
+    });
 
     presetGridWidget_ = new QWidget;
     presetGrid_ = new QGridLayout(presetGridWidget_);
     presetGrid_->setSpacing(8);
     presetGrid_->setContentsMargins(0, 0, 0, 0);
-    presetScrollArea_->setWidget(presetGridWidget_);
-    layout->addWidget(presetScrollArea_);
+    layout->addWidget(presetGridWidget_);
 
     loadBuiltinMedia();
 
@@ -332,14 +351,33 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
     layout->setSpacing(12);
     layout->setContentsMargins(20, 16, 20, 16);
 
-    // Screen mode options
+    // Mode radio buttons
+    auto *radioLayout = new QHBoxLayout;
+    radioLayout->setSpacing(16);
+    fullScreenRadio_ = new QRadioButton("Full Screen");
+    splitScreenRadio_ = new QRadioButton("Screen Splitting");
+    fullScreenRadio_->setChecked(true);
+    fullScreenRadio_->setStyleSheet("color: #ccc;");
+    splitScreenRadio_->setStyleSheet("color: #ccc;");
+    radioLayout->addWidget(fullScreenRadio_);
+    radioLayout->addWidget(splitScreenRadio_);
+    radioLayout->addStretch();
+    layout->addLayout(radioLayout);
+
+    connect(fullScreenRadio_, &QRadioButton::toggled, this, &PanoramaPage::onScreenModeChanged);
+
+    // --- Full Screen controls (existing) ---
+    fullScreenControls_ = new QWidget;
+    auto *fsLayout = new QVBoxLayout(fullScreenControls_);
+    fsLayout->setContentsMargins(0, 0, 0, 0);
+    fsLayout->setSpacing(8);
+
     auto *modeLayout = new QHBoxLayout;
     modeLayout->setSpacing(12);
 
-    modeLayout->addWidget(new QLabel("Screen Mode:"));
     screenModeCombo_ = new QComboBox;
     screenModeCombo_->addItems({"Full Screen", "Screen Splitting"});
-    modeLayout->addWidget(screenModeCombo_);
+    screenModeCombo_->hide(); // hidden, mode is now via radio buttons
 
     modeLayout->addWidget(new QLabel("Play Mode:"));
     playModeCombo_ = new QComboBox;
@@ -352,7 +390,59 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
     modeLayout->addWidget(ratioCombo_);
 
     modeLayout->addStretch();
-    layout->addLayout(modeLayout);
+    fsLayout->addLayout(modeLayout);
+
+    // System info metrics for Full Screen
+    auto *fsMetricsLabel = new QLabel("System info:");
+    fsMetricsLabel->setStyleSheet("color: #aaa; font-size: 11px;");
+
+    customMetricsBtn_ = new QToolButton;
+    customMetricsBtn_->setText(QString::fromUtf8("0 / 3 \u25BC"));
+    customMetricsBtn_->setPopupMode(QToolButton::InstantPopup);
+    customMetricsBtn_->setStyleSheet(
+        "QToolButton { background: #2a2a3e; color: #fff; border: 1px solid #4a4a5e; "
+        "border-radius: 4px; padding: 6px 12px; min-width: 80px; font-size: 12px; } "
+        "QToolButton::menu-indicator { image: none; } "
+        "QToolButton:hover { background: #3a3a4e; }");
+
+    customMetricsMenu_ = new QMenu(this);
+    QStringList metricLabels = {"CPU Temperature", "CPU Frequency", "CPU Usage", "CPU Voltage",
+        "GPU Temperature", "GPU Frequency", "GPU Usage", "GPU Voltage",
+        "Hard Disk Temperature", "Motherboard Temperature", "Memory Frequency",
+        "Memory Utilization", "Date&Time"};
+    for (const auto &label : metricLabels) {
+        auto *wa = new QWidgetAction(customMetricsMenu_);
+        auto *cb = new QCheckBox(label);
+        cb->setStyleSheet("QCheckBox { color: #fff; padding: 4px 8px; } QCheckBox:hover { background: #3a3a4e; }");
+        wa->setDefaultWidget(cb);
+        customMetricsMenu_->addAction(wa);
+        customMetricCheckboxes_.append(cb);
+        connect(cb, &QCheckBox::toggled, this, [this](bool) {
+            int count = 0;
+            for (auto *c : customMetricCheckboxes_)
+                if (c->isChecked()) count++;
+            if (count > 3) {
+                auto *s = qobject_cast<QCheckBox *>(QObject::sender());
+                if (s) s->setChecked(false);
+                return;
+            }
+            customMetricsBtn_->setText(QString::fromUtf8("%1 / 3 \u25BC").arg(count));
+        });
+    }
+    customMetricsBtn_->setMenu(customMetricsMenu_);
+
+    auto *metricsRow = new QHBoxLayout;
+    metricsRow->addWidget(fsMetricsLabel);
+    metricsRow->addWidget(customMetricsBtn_);
+    metricsRow->addStretch();
+    fsLayout->addLayout(metricsRow);
+
+    layout->addWidget(fullScreenControls_);
+
+    // --- Screen Splitting controls ---
+    splitConfigWidget_ = new SplitConfigWidget;
+    splitConfigWidget_->hide();
+    layout->addWidget(splitConfigWidget_);
 
     // Drop zone
     dropZone_ = new QLabel("Upload a file\n(MP4, WEBM, GIF, JPG, PNG)");
@@ -394,36 +484,60 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
     mlHeader->setStyleSheet("color: #fff;");
     layout->addWidget(mlHeader);
 
-    // File list (files on device)
+    // File list (files on device) - visual grid with thumbnails
     fileList_ = new QListWidget;
     fileList_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    fileList_->setMaximumHeight(150);
+    fileList_->setMinimumHeight(200);
+    fileList_->setMaximumHeight(320);
+    fileList_->setViewMode(QListView::IconMode);
+    fileList_->setIconSize(QSize(120, 80));
+    fileList_->setGridSize(QSize(140, 120));
+    fileList_->setResizeMode(QListView::Adjust);
+    fileList_->setWrapping(true);
+    fileList_->setWordWrap(true);
+    fileList_->setSpacing(6);
+    fileList_->setMovement(QListView::Static);
     fileList_->setStyleSheet(
-        "QListWidget { background: #2a2a3a; border: 1px solid #444; border-radius: 6px; color: #ddd; }"
-        "QListWidget::item:selected { background: #6c5ce7; }");
+        "QListWidget { background: #1e1e2e; border: 1px solid #444; border-radius: 6px; color: #ddd; padding: 6px; }"
+        "QListWidget::item { background: #2a2a3a; border: 1px solid #3a3a4a; border-radius: 4px; padding: 4px; }"
+        "QListWidget::item:selected { background: #6c5ce7; border: 1px solid #8b7cf7; }"
+        "QListWidget::item:hover { background: #3a3a4e; }");
     layout->addWidget(fileList_);
 
-    // File action buttons
-    auto *fileBtnLayout = new QHBoxLayout;
-    setDisplayBtn_ = new QPushButton("Set Display");
-    deleteBtn_ = new QPushButton("Delete");
-    refreshBtn_ = new QPushButton("Refresh");
+    // Context menu on file list (replaces buttons)
+    fileList_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(fileList_, &QListWidget::customContextMenuRequested,
+            this, &PanoramaPage::onFileListContextMenu);
 
-    for (auto *btn : {setDisplayBtn_, deleteBtn_, refreshBtn_}) {
-        btn->setStyleSheet(
-            "QPushButton { background: #3d3d4d; color: #ddd; border: none; border-radius: 4px; padding: 6px 12px; }"
-            "QPushButton:hover { background: #4d4d5d; }");
-    }
+    // Hidden buttons for backward compat (not shown in UI)
+    setDisplayBtn_ = new QPushButton;
+    setDisplayBtn_->hide();
+    deleteBtn_ = new QPushButton;
+    deleteBtn_->hide();
+    refreshBtn_ = new QPushButton;
+    refreshBtn_->hide();
 
-    fileBtnLayout->addWidget(setDisplayBtn_);
-    fileBtnLayout->addWidget(deleteBtn_);
-    fileBtnLayout->addWidget(refreshBtn_);
-    fileBtnLayout->addStretch();
-    layout->addLayout(fileBtnLayout);
+    // Refresh + Save row
+    auto *actionLayout = new QHBoxLayout;
+    auto *refreshBtn = new QPushButton("Refresh");
+    refreshBtn->setStyleSheet(
+        "QPushButton { background: #3d3d4d; color: #ddd; border: none; border-radius: 4px; padding: 6px 12px; }"
+        "QPushButton:hover { background: #4d4d5d; }");
+    connect(refreshBtn, &QPushButton::clicked, this, &PanoramaPage::onRefreshClicked);
+    actionLayout->addWidget(refreshBtn);
 
-    connect(setDisplayBtn_, &QPushButton::clicked, this, &PanoramaPage::onSetDisplayClicked);
-    connect(deleteBtn_, &QPushButton::clicked, this, &PanoramaPage::onDeleteClicked);
-    connect(refreshBtn_, &QPushButton::clicked, this, &PanoramaPage::onRefreshClicked);
+    actionLayout->addStretch();
+
+    customSaveBtn_ = new QPushButton("Save");
+    customSaveBtn_->setMinimumHeight(36);
+    customSaveBtn_->setMinimumWidth(120);
+    customSaveBtn_->setStyleSheet(
+        "QPushButton { background: #00b894; color: white; border: none; border-radius: 4px; padding: 8px 24px; font-weight: bold; font-size: 13px; }"
+        "QPushButton:hover { background: #00a381; }");
+    connect(customSaveBtn_, &QPushButton::clicked, this, &PanoramaPage::onCustomSave);
+    actionLayout->addWidget(customSaveBtn_);
+
+    layout->addLayout(actionLayout);
 
     layout->addStretch();
 
@@ -490,7 +604,6 @@ void PanoramaPage::loadBuiltinMedia() {
                            "*.gif", "*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp"};
     auto entries = dir.entryInfoList(filters, QDir::Files, QDir::Name);
 
-    int row = 0, col = 0;
     for (const auto &entry : entries) {
         MediaEntry me;
         me.filePath = entry.absoluteFilePath();
@@ -516,15 +629,10 @@ void PanoramaPage::loadBuiltinMedia() {
         badge->move(4, 4);
         badge->raise();
 
-        presetGrid_->addWidget(tile, row, col);
         presetTiles_.append(tile);
-
-        col++;
-        if (col >= GRID_COLUMNS) {
-            col = 0;
-            row++;
-        }
     }
+
+    rebuildPresetGrid();
 }
 
 void PanoramaPage::onTileClicked(MediaTile *tile) {
@@ -534,6 +642,28 @@ void PanoramaPage::onTileClicked(MediaTile *tile) {
     }
     tile->setSelected(!tile->isSelected());
     selectedPresetTile_ = tile->isSelected() ? tile : nullptr;
+
+    // Preview
+    previewPlayer_->stop();
+    previewLabel_->hide();
+
+    if (selectedPresetTile_) {
+        QString path = selectedPresetTile_->filePath();
+        QString ext = path.section('.', -1).toLower();
+        if (ext == "mp4" || ext == "webm" || ext == "mkv" || ext == "avi" || ext == "mov") {
+            previewLabel_->show();
+            previewPlayer_->setSource(QUrl::fromLocalFile(path));
+            previewPlayer_->setLoops(QMediaPlayer::Infinite);
+            previewPlayer_->play();
+        } else {
+            QPixmap thumb = selectedPresetTile_->thumbnail();
+            if (!thumb.isNull()) {
+                previewLabel_->setPixmap(QPixmap::fromImage(
+                    thumb.toImage().scaled(previewLabel_->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+                previewLabel_->show();
+            }
+        }
+    }
 }
 
 void PanoramaPage::onMetricToggled() {
@@ -628,8 +758,8 @@ void PanoramaPage::applyScreenConfig() {
         }
     }
 
-    fprintf(stderr, "[panorama] save: preset='%s' media=%d metrics=%d\n",
-            presetId.toStdString().c_str(), media.size(), labels.size());
+    fprintf(stderr, "[panorama] save: preset='%s' media=%lld metrics=%lld\n",
+            presetId.toStdString().c_str(), (long long)media.size(), (long long)labels.size());
 
     deviceMgr_->setScreenConfig(
         media,
@@ -647,7 +777,7 @@ void PanoramaPage::applyScreenConfig() {
 }
 
 void PanoramaPage::savePageState() {
-    QSettings settings("reed-tpse", "PanoramaPage");
+    QSettings settings("tryx-panorama", "PanoramaPage");
 
     // Save selected preset tile name
     if (selectedPresetTile_) {
@@ -675,7 +805,7 @@ void PanoramaPage::savePageState() {
 }
 
 void PanoramaPage::restorePageState() {
-    QSettings settings("reed-tpse", "PanoramaPage");
+    QSettings settings("tryx-panorama", "PanoramaPage");
 
     // Restore selected preset tile
     QString savedName = settings.value("preset/selectedName").toString();
@@ -883,6 +1013,166 @@ void PanoramaPage::onUploadBuiltinClicked() {
     deviceMgr_->uploadMedia(selectedPresetTile_->filePath());
 }
 
+void PanoramaPage::onScreenModeChanged() {
+    bool isSplit = splitScreenRadio_->isChecked();
+    fullScreenControls_->setVisible(!isSplit);
+    splitConfigWidget_->setVisible(isSplit);
+}
+
+void PanoramaPage::onCustomSave() {
+    bool isSplit = splitScreenRadio_->isChecked();
+
+    if (isSplit) {
+        // Screen Splitting mode
+        QStringList leftMedia = splitConfigWidget_->leftMedia();
+        QStringList rightMedia = splitConfigWidget_->rightMedia();
+
+        if (leftMedia.isEmpty() || rightMedia.isEmpty()) {
+            emit statusMessage("Assign media to both left and right sides");
+            return;
+        }
+
+        QStringList allMedia;
+        allMedia << leftMedia << rightMedia;
+
+        QStringList leftMetrics = splitConfigWidget_->leftMetrics();
+        QStringList rightMetrics = splitConfigWidget_->rightMetrics();
+        QString playMode = splitConfigWidget_->playMode();
+
+        fprintf(stderr, "[panorama] split save: left=%lld right=%lld leftMetrics=%lld rightMetrics=%lld\n",
+                (long long)leftMedia.size(), (long long)rightMedia.size(),
+                (long long)leftMetrics.size(), (long long)rightMetrics.size());
+
+        bool waterfall = splitConfigWidget_->waterfallMode();
+        fprintf(stderr, "[waterfallMode] user=%d\n", waterfall);
+
+        deviceMgr_->setScreenConfig(
+            allMedia,
+            "2:1",
+            "Screen Splitting",
+            playMode,
+            leftMetrics,
+            "Top",
+            "#FFFFFF",
+            "Left",
+            {},    // badges left
+            0,
+            QString(),  // no preset
+            rightMetrics,
+            {},    // badges right
+            waterfall
+        );
+
+        // Start metrics sending if any metrics selected
+        if (!leftMetrics.isEmpty() || !rightMetrics.isEmpty()) {
+            QTimer::singleShot(2000, this, [this]() { startMetrics(); });
+        }
+
+        emit statusMessage("Screen Splitting configuration applied");
+    } else {
+        // Full Screen mode - use selected files from list
+        auto selected = fileList_->selectedItems();
+        if (selected.isEmpty()) {
+            emit statusMessage("Select files to display");
+            return;
+        }
+
+        QStringList media;
+        for (auto *item : selected) {
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+            media << filename;
+        }
+
+        QString ratio = ratioCombo_->currentText();
+        QString playMode = playModeCombo_->currentText();
+
+        // Collect selected metrics
+        QStringList metrics;
+        for (auto *cb : customMetricCheckboxes_)
+            if (cb->isChecked()) metrics << cb->text();
+
+        deviceMgr_->setScreenConfig(media, ratio, "Full Screen", playMode, metrics,
+            "Top", "#FFFFFF", "Left", {}, 0);
+
+        if (!metrics.isEmpty()) {
+            QTimer::singleShot(2000, this, [this]() { startMetrics(); });
+        }
+
+        emit statusMessage("Full Screen configuration applied");
+    }
+}
+
+void PanoramaPage::onFileListContextMenu(const QPoint &pos) {
+    auto *item = fileList_->itemAt(pos);
+    if (!item) return;
+
+    QMenu menu(this);
+    bool isSplit = splitScreenRadio_->isChecked();
+
+    if (isSplit) {
+        auto *setLeft = menu.addAction("Set to left side");
+        auto *setRight = menu.addAction("Set to right side");
+
+        connect(setLeft, &QAction::triggered, this, [this, item]() {
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+            QPixmap thumb;
+            // Try to load cached thumbnail
+            QString thumbName = filename;
+            thumbName.replace(' ', '_');
+            thumbName += ".jpg";
+            QString thumbPath = THUMB_CACHE_DIR + "/" + thumbName;
+            if (QFileInfo::exists(thumbPath)) {
+                thumb = QPixmap(thumbPath);
+            }
+            splitConfigWidget_->assignToLeft(filename, thumb);
+        });
+        connect(setRight, &QAction::triggered, this, [this, item]() {
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+            QPixmap thumb;
+            // Try to load cached thumbnail
+            QString thumbName = filename;
+            thumbName.replace(' ', '_');
+            thumbName += ".jpg";
+            QString thumbPath = THUMB_CACHE_DIR + "/" + thumbName;
+            if (QFileInfo::exists(thumbPath)) {
+                thumb = QPixmap(thumbPath);
+            }
+            splitConfigWidget_->assignToRight(filename, thumb);
+        });
+    } else {
+        auto *setDisplay = menu.addAction("Set as display");
+        connect(setDisplay, &QAction::triggered, this, [this, item]() {
+            QString filename = item->data(Qt::UserRole).toString();
+            if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+            QStringList media;
+            media << filename;
+            QString ratio = ratioCombo_->currentText();
+            QString playMode = playModeCombo_->currentText();
+            deviceMgr_->setScreenConfig(media, ratio, "Full Screen", playMode);
+            emit statusMessage("Screen config applied");
+        });
+    }
+
+    menu.addSeparator();
+    auto *deleteAction = menu.addAction("Delete");
+    connect(deleteAction, &QAction::triggered, this, [this, item]() {
+        QString filename = item->data(Qt::UserRole).toString();
+        if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+        QStringList files;
+        files << filename;
+        auto reply = QMessageBox::question(this, "Delete",
+                                           QString("Delete %1?").arg(filename));
+        if (reply == QMessageBox::Yes) {
+            deviceMgr_->deleteMedia(files);
+        }
+    });
+
+    menu.exec(fileList_->mapToGlobal(pos));
+}
+
 void PanoramaPage::onSetDisplayClicked() {
     auto selected = fileList_->selectedItems();
     if (selected.isEmpty()) {
@@ -892,7 +1182,9 @@ void PanoramaPage::onSetDisplayClicked() {
 
     QStringList media;
     for (auto *item : selected) {
-        media << item->text();
+        QString filename = item->data(Qt::UserRole).toString();
+        if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+        media << filename;
     }
 
     QString ratio = ratioCombo_ ? ratioCombo_->currentText() : "2:1";
@@ -912,7 +1204,9 @@ void PanoramaPage::onDeleteClicked() {
 
     QStringList files;
     for (auto *item : selected) {
-        files << item->text();
+        QString filename = item->data(Qt::UserRole).toString();
+        if (filename.isEmpty()) filename = item->text().section('\n', 0, 0);
+        files << filename;
     }
 
     auto reply = QMessageBox::question(this, "Delete",
@@ -927,13 +1221,39 @@ void PanoramaPage::onRefreshClicked() {
 }
 
 void PanoramaPage::onBrightnessChanged(int value) {
+    fprintf(stderr, "[brightness] %d\n", value);
     deviceMgr_->setBrightness(value);
 }
 
 void PanoramaPage::onMediaListUpdated(const QStringList &files) {
     fileList_->clear();
+    QDir().mkpath(THUMB_CACHE_DIR);
+
     for (const auto &f : files) {
-        fileList_->addItem(f);
+        QString ext = QFileInfo(f).suffix().toUpper();
+        if (ext.isEmpty()) ext = "FILE";
+        QString displayText = f + "\n" + ext;
+
+        auto *item = new QListWidgetItem(displayText);
+        item->setData(Qt::UserRole, f);  // Store original filename
+        item->setTextAlignment(Qt::AlignCenter);
+
+        // Try to load cached thumbnail
+        QString thumbName = QString(f).replace(' ', '_') + ".jpg";
+        QString thumbPath = THUMB_CACHE_DIR + "/" + thumbName;
+        if (QFileInfo::exists(thumbPath)) {
+            QPixmap pix(thumbPath);
+            if (!pix.isNull()) {
+                item->setIcon(QIcon(pix.scaled(120, 80, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
+            }
+        } else {
+            // Dark placeholder icon
+            QPixmap placeholder(120, 80);
+            placeholder.fill(QColor("#2a2a3a"));
+            item->setIcon(QIcon(placeholder));
+        }
+
+        fileList_->addItem(item);
     }
     emit statusMessage(QString("Files on device: %1").arg(files.size()));
 }
@@ -990,5 +1310,36 @@ void PanoramaPage::dropEvent(QDropEvent *event) {
             deviceMgr_->uploadMedia(url.toLocalFile());
             break;
         }
+    }
+}
+
+int PanoramaPage::calculateGridColumns() const {
+    int availableWidth = presetGridWidget_ ? presetGridWidget_->width() : 810;
+    int cols = availableWidth / 270;
+    return qMax(2, cols);
+}
+
+void PanoramaPage::rebuildPresetGrid() {
+    // Remove all widgets from grid without deleting them
+    while (presetGrid_->count() > 0) {
+        presetGrid_->takeAt(0);
+    }
+
+    int columns = calculateGridColumns();
+    int row = 0, col = 0;
+    for (auto *tile : presetTiles_) {
+        presetGrid_->addWidget(tile, row, col);
+        col++;
+        if (col >= columns) {
+            col = 0;
+            row++;
+        }
+    }
+}
+
+void PanoramaPage::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    if (!presetTiles_.isEmpty()) {
+        rebuildPresetGrid();
     }
 }

@@ -216,8 +216,8 @@ RamMetrics SystemMonitor::readRamMetrics() {
 
     QMap<QString, int64_t> info;
     QTextStream in(&file);
-    while (!in.atEnd()) {
-        QString line = in.readLine();
+    QString line;
+    while (!(line = in.readLine()).isNull()) {
         QStringList parts = line.split(QRegularExpression("[:\\s]+"), Qt::SkipEmptyParts);
         if (parts.size() >= 2) {
             info[parts[0]] = parts[1].toLongLong();
@@ -246,8 +246,9 @@ NetMetrics SystemMonitor::readNetMetrics() {
     int64_t totalTx = 0;
 
     QTextStream in(&file);
-    while (!in.atEnd()) {
-        QString line = in.readLine().trimmed();
+    QString line;
+    while (!(line = in.readLine()).isNull()) {
+        line = line.trimmed();
         if (!line.contains(':')) {
             continue;
         }

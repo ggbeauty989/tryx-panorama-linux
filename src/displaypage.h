@@ -30,6 +30,7 @@ public:
     bool isSelected() const { return selected_; }
     void setSelected(bool sel);
     void setThumbnail(const QPixmap &pix);
+    QPixmap thumbnail() const { return thumb_; }
 
 signals:
     void clicked(MediaTile *tile);
@@ -41,6 +42,7 @@ private:
     void updateStyle();
 
     MediaEntry entry_;
+    QPixmap thumb_;
     bool selected_ = false;
     QLabel *imageLabel_;
     QLabel *nameLabel_;

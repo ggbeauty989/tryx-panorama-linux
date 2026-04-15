@@ -45,6 +45,7 @@ void MainWindow::setupUi() {
     navList_->setSpacing(2);
     navList_->addItem("Homepage");
     navList_->addItem("Panorama");
+    navList_->addItem("Rota");
     navList_->addItem("Settings");
     navList_->setCurrentRow(0);
 
@@ -77,8 +78,47 @@ void MainWindow::setupUi() {
     panoramaPage_ = new PanoramaPage(deviceMgr_);
     settingsPage_ = new SettingsPage(deviceMgr_);
 
+    // Rota placeholder
+    auto *rotaPage = new QWidget;
+    auto *rotaLayout = new QVBoxLayout(rotaPage);
+    rotaLayout->setContentsMargins(40, 40, 40, 40);
+    rotaLayout->setAlignment(Qt::AlignTop);
+
+    auto *rotaTitle = new QLabel("ROTA");
+    rotaTitle->setStyleSheet("color: #fff; font-size: 22px; font-weight: bold;");
+    rotaLayout->addWidget(rotaTitle);
+
+    auto *rotaSubtitle = new QLabel("Lighting & Fan Speed Control");
+    rotaSubtitle->setStyleSheet("color: #aaa; font-size: 13px;");
+    rotaLayout->addWidget(rotaSubtitle);
+
+    rotaLayout->addSpacing(30);
+
+    auto *rotaStatus = new QLabel("In Development");
+    rotaStatus->setStyleSheet(
+        "color: #DEF750; font-size: 16px; font-weight: bold; "
+        "background: #2a2a3e; padding: 16px 32px; border-radius: 8px; border: 1px solid #DEF750;");
+    rotaStatus->setAlignment(Qt::AlignCenter);
+    rotaLayout->addWidget(rotaStatus, 0, Qt::AlignCenter);
+
+    rotaLayout->addSpacing(20);
+
+    auto *rotaDesc = new QLabel(
+        "ROTA is the ARGB lighting and fan speed controller for TRYX coolers.\n\n"
+        "Planned features:\n"
+        "  - ARGB lighting effects (15+ presets)\n"
+        "  - Fan speed control (Smart/Fixed modes)\n"
+        "  - Per-fan speed curves\n"
+        "  - Motherboard ARGB sync");
+    rotaDesc->setStyleSheet("color: #888; font-size: 12px;");
+    rotaDesc->setWordWrap(true);
+    rotaLayout->addWidget(rotaDesc);
+
+    rotaLayout->addStretch();
+
     stack_->addWidget(homepage_);
     stack_->addWidget(panoramaPage_);
+    stack_->addWidget(rotaPage);
     stack_->addWidget(settingsPage_);
 
     mainLayout->addWidget(stack_, 1);

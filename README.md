@@ -1,6 +1,21 @@
-# TRYX Panorama SE 360 - Linux GUI Manager
+# TRYX Panorama Linux GUI
 
-Qt6 GUI application for managing the TRYX Panorama SE 360 AIO cooler display on Linux.
+Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
+
+## Supported Models
+
+| Model | Status |
+|-------|--------|
+| Panorama SE 360 | Tested |
+| Panorama SE 240 | Should work (same display protocol) |
+| Panorama | Should work |
+| Panorama WB | Should work |
+
+<div align="center">
+
+[Demo video](demo.mp4)
+
+</div>
 
 ## What was done
 
@@ -45,8 +60,8 @@ Qt6 GUI application for managing the TRYX Panorama SE 360 AIO cooler display on 
 ## Build
 
 ```bash
-git clone https://github.com/DXVSI/tryx-panorama-se-360-linux-gui.git
-cd tryx-panorama-se-360-linux-gui
+git clone https://gitlab.com/dxvsi/tryx-panorama-linux.git
+cd tryx-panorama-linux
 qmake6
 make -j$(nproc)
 ./build/tryx-panorama-manager
@@ -65,7 +80,7 @@ src/
   devicemanager.*    # Async device communication
   systemmonitor.*    # System metrics reader
   traymanager.*      # System tray
-include/reed/        # Protocol headers
+include/panorama/    # Protocol headers
 media/               # Built-in videos
 ```
 
@@ -73,7 +88,7 @@ media/               # Built-in videos
 
 | Distro | Kernel | CPU | GPU1 | GPU2 |
 |--------|--------|-----|------|------|
-| Fedora 43 | 6.19.9 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
+| Fedora 43 | 6.19.10 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
 
 ## License
 

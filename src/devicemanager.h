@@ -7,10 +7,10 @@
 #include <QThread>
 #include <memory>
 
-#include <reed/device.hpp>
-#include <reed/adb.hpp>
-#include <reed/config.hpp>
-#include <reed/media.hpp>
+#include <panorama/device.hpp>
+#include <panorama/adb.hpp>
+#include <panorama/config.hpp>
+#include <panorama/media.hpp>
 
 class DeviceWorker : public QObject {
     Q_OBJECT
@@ -31,7 +31,12 @@ public slots:
                          const QString &settingsAlign,
                          const QStringList &settingsBadges,
                          int filterOpacity,
-                         const QString &presetId = QString());
+                         const QString &presetId = QString(),
+                         const QStringList &sysinfoLabels2 = {},
+                         const QStringList &settingsBadges2 = {},
+                         bool waterfallMode = false);
+    void setRotation(int degrees);
+    void rebootDevice();
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -53,7 +58,7 @@ signals:
     void uploadProgress(const QString &status);
 
 private:
-    std::unique_ptr<reed::Device> device_;
+    std::unique_ptr<panorama::Device> device_;
 };
 
 class DeviceManager : public QObject {
@@ -77,7 +82,12 @@ public slots:
                          const QString &settingsAlign = "Left",
                          const QStringList &settingsBadges = {},
                          int filterOpacity = 0,
-                         const QString &presetId = QString());
+                         const QString &presetId = QString(),
+                         const QStringList &sysinfoLabels2 = {},
+                         const QStringList &settingsBadges2 = {},
+                         bool waterfallMode = false);
+    void setRotation(int degrees);
+    void rebootDevice();
     void deleteMedia(const QStringList &files);
     void uploadMedia(const QString &localPath);
     void refreshMediaList();
@@ -111,7 +121,12 @@ signals:
                              const QString &settingsAlign,
                              const QStringList &settingsBadges,
                              int filterOpacity,
-                             const QString &presetId = QString());
+                             const QString &presetId,
+                             const QStringList &sysinfoLabels2,
+                             const QStringList &settingsBadges2,
+                             bool waterfallMode);
+    void requestRotation(int degrees);
+    void requestReboot();
     void requestDeleteMedia(const QStringList &files);
     void requestUploadMedia(const QString &localPath);
     void requestRefreshMedia();

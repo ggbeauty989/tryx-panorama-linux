@@ -1,196 +1,203 @@
-#include "reed/config.hpp"
+#include "panorama/config.hpp"
 
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
+#include <iterator>
+#include <string>
 
-#include "reed/picojson.h"
+#include "panorama/picojson.h"
 
-namespace fs = std::filesystem;
-
-namespace reed {
+namespace panorama {
 
 namespace {
 
-std::string get_string(const picojson::value& v, const std::string& key,
-                       const std::string& def = "") {
-  if (!v.is<picojson::object>()) return def;
-  const auto& obj = v.get<picojson::object>();
-  auto it = obj.find(key);
-  if (it == obj.end() || !it->second.is<std::string>()) return def;
-  return it->second.get<std::string>();
+constexpr const char* kAppName = "tryx-panorama";
+constexpr const char* kConfigFilename = "config.json";
+constexpr const char* kStateFilename = "display.json";
+
+std::string extract_text(const picojson::object& node, const std::string& field,
+                         const std::string& fallback) {
+  auto pos = node.find(field);
+  if (pos != node.end() && pos->second.is<std::string>()) {
+    return pos->second.get<std::string>();
+  }
+  return fallback;
 }
 
-int get_int(const picojson::value& v, const std::string& key, int def = 0) {
-  if (!v.is<picojson::object>()) return def;
-  const auto& obj = v.get<picojson::object>();
-  auto it = obj.find(key);
-  if (it == obj.end() || !it->second.is<double>()) return def;
-  return static_cast<int>(it->second.get<double>());
+int extract_number(const picojson::object& node, const std::string& field,
+                   int fallback) {
+  auto pos = node.find(field);
+  if (pos != node.end() && pos->second.is<double>()) {
+    return static_cast<int>(pos->second.get<double>());
+  }
+  return fallback;
 }
 
-const picojson::value& get_value(const picojson::value& v,
-                                 const std::string& key) {
-  static picojson::value null_val;
-  if (!v.is<picojson::object>()) return null_val;
-  const auto& obj = v.get<picojson::object>();
-  auto it = obj.find(key);
-  if (it == obj.end()) return null_val;
-  return it->second;
+picojson::value to_json_number(int n) {
+  return picojson::value(static_cast<double>(n));
+}
+
+picojson::value to_json_text(const std::string& s) {
+  return picojson::value(s);
+}
+
+bool parse_root_object(const std::string& raw, picojson::object& out) {
+  picojson::value parsed;
+  std::string parse_err = picojson::parse(parsed, raw);
+  if (!parse_err.empty() || !parsed.is<picojson::object>()) {
+    return false;
+  }
+  out = parsed.get<picojson::object>();
+  return true;
 }
 
 }  // namespace
 
+std::string ConfigManager::resolve_xdg_path(const char* env_var,
+                                             const char* fallback_suffix) {
+  const char* xdg_val = std::getenv(env_var);
+  if (xdg_val != nullptr && xdg_val[0] != '\0') {
+    return std::string(xdg_val) + "/" + kAppName;
+  }
+  const char* home_dir = std::getenv("HOME");
+  if (home_dir != nullptr && home_dir[0] != '\0') {
+    return std::string(home_dir) + "/" + fallback_suffix + "/" + kAppName;
+  }
+  return std::string(fallback_suffix) + "/" + kAppName;
+}
+
+std::string ConfigManager::read_file_contents(const std::string& filepath) {
+  std::ifstream input(filepath);
+  if (!input.is_open()) {
+    return {};
+  }
+  return {std::istreambuf_iterator<char>(input),
+          std::istreambuf_iterator<char>()};
+}
+
+bool ConfigManager::write_json_file(const std::string& filepath,
+                                    const std::string& json_text) {
+  std::ofstream output(filepath);
+  if (!output.is_open()) {
+    return false;
+  }
+  output << json_text << "\n";
+  return output.good();
+}
+
 std::string ConfigManager::get_config_dir() {
-  const char* xdg_config = std::getenv("XDG_CONFIG_HOME");
-  if (xdg_config && *xdg_config) {
-    return std::string(xdg_config) + "/reed-tpse";
-  }
-
-  const char* home = std::getenv("HOME");
-  if (home && *home) {
-    return std::string(home) + "/.config/reed-tpse";
-  }
-
-  return ".config/reed-tpse";
+  return resolve_xdg_path("XDG_CONFIG_HOME", ".config");
 }
 
 std::string ConfigManager::get_state_dir() {
-  const char* xdg_state = std::getenv("XDG_STATE_HOME");
-  if (xdg_state && *xdg_state) {
-    return std::string(xdg_state) + "/reed-tpse";
-  }
-
-  const char* home = std::getenv("HOME");
-  if (home && *home) {
-    return std::string(home) + "/.local/state/reed-tpse";
-  }
-
-  return ".local/state/reed-tpse";
+  return resolve_xdg_path("XDG_STATE_HOME", ".local/state");
 }
 
 std::string ConfigManager::get_config_path() {
-  return get_config_dir() + "/config.json";
+  return get_config_dir() + "/" + kConfigFilename;
 }
 
 std::string ConfigManager::get_state_path() {
-  return get_state_dir() + "/display.json";
+  return get_state_dir() + "/" + kStateFilename;
 }
 
 std::optional<Config> ConfigManager::load_config() {
-  std::string path = get_config_path();
+  auto target = get_config_path();
 
-  if (!fs::exists(path)) {
+  if (!std::filesystem::exists(target)) {
     return Config{};
   }
 
-  std::ifstream file(path);
-  if (!file) {
+  std::string raw = read_file_contents(target);
+  if (raw.empty()) {
     return std::nullopt;
   }
 
-  std::ostringstream ss;
-  ss << file.rdbuf();
-
-  picojson::value json;
-  std::string err = picojson::parse(json, ss.str());
-  if (!err.empty()) {
+  picojson::object root;
+  if (!parse_root_object(raw, root)) {
     return std::nullopt;
   }
 
-  Config config;
-  config.port = get_string(json, "port", config.port);
-  config.brightness = get_int(json, "brightness", config.brightness);
-  config.keepalive_interval = get_int(json, "keepalive_interval", config.keepalive_interval);
+  Config cfg;
+  cfg.port = extract_text(root, "port", cfg.port);
+  cfg.brightness = extract_number(root, "brightness", cfg.brightness);
+  cfg.keepalive_interval =
+      extract_number(root, "keepalive_interval", cfg.keepalive_interval);
 
-  return config;
+  return cfg;
 }
 
 bool ConfigManager::save_config(const Config& config) {
-  std::string dir = get_config_dir();
-  fs::create_directories(dir);
+  auto dir_path = get_config_dir();
+  std::filesystem::create_directories(dir_path);
 
-  std::string path = get_config_path();
-  std::ofstream file(path);
-  if (!file) {
-    return false;
-  }
+  picojson::object root;
+  root["port"] = to_json_text(config.port);
+  root["brightness"] = to_json_number(config.brightness);
+  root["keepalive_interval"] = to_json_number(config.keepalive_interval);
 
-  picojson::object obj;
-  obj["port"] = picojson::value(config.port);
-  obj["brightness"] = picojson::value(static_cast<double>(config.brightness));
-  obj["keepalive_interval"] =
-      picojson::value(static_cast<double>(config.keepalive_interval));
-
-  file << picojson::value(obj).serialize() << "\n";
-  return file.good();
+  std::string serialized = picojson::value(root).serialize();
+  return write_json_file(get_config_path(), serialized);
 }
 
 std::optional<DisplayState> ConfigManager::load_state() {
-  std::string path = get_state_path();
+  auto target = get_state_path();
 
-  if (!fs::exists(path)) {
+  if (!std::filesystem::exists(target)) {
     return std::nullopt;
   }
 
-  std::ifstream file(path);
-  if (!file) {
+  std::string raw = read_file_contents(target);
+  if (raw.empty()) {
     return std::nullopt;
   }
 
-  std::ostringstream ss;
-  ss << file.rdbuf();
-
-  picojson::value json;
-  std::string err = picojson::parse(json, ss.str());
-  if (!err.empty()) {
+  picojson::object root;
+  if (!parse_root_object(raw, root)) {
     return std::nullopt;
   }
 
-  DisplayState state;
+  DisplayState ds;
 
-  const auto& media_val = get_value(json, "media");
-  if (media_val.is<picojson::array>()) {
-    for (const auto& m : media_val.get<picojson::array>()) {
-      if (m.is<std::string>()) {
-        state.media.push_back(m.get<std::string>());
+  auto media_it = root.find("media");
+  if (media_it != root.end() && media_it->second.is<picojson::array>()) {
+    const auto& items = media_it->second.get<picojson::array>();
+    ds.media.reserve(items.size());
+    for (const auto& entry : items) {
+      if (entry.is<std::string>()) {
+        ds.media.push_back(entry.get<std::string>());
       }
     }
   }
 
-  state.ratio = get_string(json, "ratio", state.ratio);
-  state.screen_mode = get_string(json, "screen_mode", state.screen_mode);
-  state.play_mode = get_string(json, "play_mode", state.play_mode);
-  state.brightness = get_int(json, "brightness", state.brightness);
+  ds.ratio = extract_text(root, "ratio", ds.ratio);
+  ds.screen_mode = extract_text(root, "screen_mode", ds.screen_mode);
+  ds.play_mode = extract_text(root, "play_mode", ds.play_mode);
+  ds.brightness = extract_number(root, "brightness", ds.brightness);
 
-  return state;
+  return ds;
 }
 
 bool ConfigManager::save_state(const DisplayState& state) {
-  std::string dir = get_state_dir();
-  fs::create_directories(dir);
+  auto dir_path = get_state_dir();
+  std::filesystem::create_directories(dir_path);
 
-  std::string path = get_state_path();
-  std::ofstream file(path);
-  if (!file) {
-    return false;
+  picojson::array media_entries;
+  media_entries.reserve(state.media.size());
+  for (const auto& item : state.media) {
+    media_entries.push_back(to_json_text(item));
   }
 
-  picojson::array media_arr;
-  for (const auto& m : state.media) {
-    media_arr.push_back(picojson::value(m));
-  }
+  picojson::object root;
+  root["media"] = picojson::value(media_entries);
+  root["ratio"] = to_json_text(state.ratio);
+  root["screen_mode"] = to_json_text(state.screen_mode);
+  root["play_mode"] = to_json_text(state.play_mode);
+  root["brightness"] = to_json_number(state.brightness);
 
-  picojson::object obj;
-  obj["media"] = picojson::value(media_arr);
-  obj["ratio"] = picojson::value(state.ratio);
-  obj["screen_mode"] = picojson::value(state.screen_mode);
-  obj["play_mode"] = picojson::value(state.play_mode);
-  obj["brightness"] = picojson::value(static_cast<double>(state.brightness));
-
-  file << picojson::value(obj).serialize() << "\n";
-  return file.good();
+  std::string serialized = picojson::value(root).serialize();
+  return write_json_file(get_state_path(), serialized);
 }
 
-}  // namespace reed
+}  // namespace panorama

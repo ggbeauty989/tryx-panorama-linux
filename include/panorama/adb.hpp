@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace reed {
+namespace panorama {
 
 class Adb {
  public:
@@ -18,8 +18,10 @@ class Adb {
   static bool remove(const std::string& filename);
 
  private:
+  static std::string find_tryx_serial();
+  static std::string escape_shell_arg(const std::string& input);
   static std::optional<std::string> run_command(
       const std::vector<std::string>& args);
 };
 
-}  // namespace reed
+}  // namespace panorama
