@@ -14,7 +14,6 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 
 <div align="center">
 
-[Demo video](demo.mp4)
 
 </div>
 
