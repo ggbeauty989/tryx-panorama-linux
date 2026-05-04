@@ -1,4 +1,5 @@
 #include "devicemanager.h"
+#include <QDir>
 #include <QFileInfo>
 #include <fstream>
 #include <filesystem>
@@ -20,7 +21,23 @@ void DeviceWorker::connectDevice(const QString &port) {
     if (port.isEmpty()) {
         auto detected = panorama::Device::find_device();
         if (!detected) {
-            emit error("Устройство не найдено. Проверьте подключение USB.");
+            // Disambiguate "no device" vs "device present but unreadable":
+            // the second case is by far the most common first-run failure
+            // and the generic message sends users on a wild goose chase.
+            QStringList candidates = QDir("/dev").entryList(
+                QStringList{"ttyACM*"}, QDir::System);
+            for (const QString &name : candidates) {
+                QFileInfo fi("/dev/" + name);
+                if (fi.exists() && (!fi.isReadable() || !fi.isWritable())) {
+                    emit error(QString(
+                        "No permission to open /dev/%1. "
+                        "Add yourself to the 'dialout' group "
+                        "(sudo usermod -aG dialout $USER) then log out and back in.")
+                        .arg(name));
+                    return;
+                }
+            }
+            emit error("Device not found. Check the USB connection.");
             return;
         }
         portStr = *detected;
@@ -30,7 +47,16 @@ void DeviceWorker::connectDevice(const QString &port) {
 
     device_ = std::make_unique<panorama::Device>(portStr);
     if (!device_->connect()) {
-        emit error(QString("Не удалось подключиться к %1").arg(QString::fromStdString(portStr)));
+        QFileInfo fi(QString::fromStdString(portStr));
+        if (fi.exists() && (!fi.isReadable() || !fi.isWritable())) {
+            emit error(QString(
+                "No permission to open %1. "
+                "Add yourself to the 'dialout' group "
+                "(sudo usermod -aG dialout $USER) then log out and back in.")
+                .arg(QString::fromStdString(portStr)));
+        } else {
+            emit error(QString("Failed to connect to %1").arg(QString::fromStdString(portStr)));
+        }
         device_.reset();
         return;
     }
@@ -43,18 +69,19 @@ void DeviceWorker::disconnectDevice() {
         device_->disconnect();
         device_.reset();
     }
+    panorama::Adb::reset_cache();
     emit disconnected();
 }
 
 void DeviceWorker::doHandshake() {
     if (!device_ || !device_->is_connected()) {
-        emit error("Устройство не подключено");
+        emit error("Device not connected");
         return;
     }
 
     auto info = device_->handshake();
     if (!info) {
-        emit error("Handshake не удался");
+        emit error("Handshake failed");
         return;
     }
 
@@ -68,15 +95,16 @@ void DeviceWorker::doHandshake() {
 
 void DeviceWorker::setBrightness(int value) {
     if (!device_ || !device_->is_connected()) {
-        emit error("Устройство не подключено");
+        emit error("Device not connected");
         return;
     }
 
     auto resp = device_->set_brightness(value);
     if (!resp) {
-        emit error("Не удалось установить яркость");
+        emit error("Failed to set brightness");
         return;
     }
+    currentBrightness_ = value;
     emit brightnessSet(value);
 }
 
@@ -93,7 +121,7 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
                                    const QStringList &settingsBadges2,
                                    bool waterfallMode) {
     if (!device_ || !device_->is_connected()) {
-        emit error("Устройство не подключено");
+        emit error("Device not connected");
         return;
     }
 
@@ -138,7 +166,7 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
 
     auto resp = device_->set_screen_config(config);
     if (!resp) {
-        emit error("Не удалось установить конфигурацию экрана");
+        emit error("Failed to apply screen configuration");
         return;
     }
 
@@ -230,7 +258,7 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
     fprintf(stderr, "[config] cpu='%s' gpu='%s'\n", cpuName.c_str(), gpuName.c_str());
 
     // Send full config (KANALI format) - sets everything in one command
-    device_->send_full_config(config, cpuName, gpuName, 75, "Celsius");
+    device_->send_full_config(config, cpuName, gpuName, currentBrightness_, "Celsius");
 
     emit screenConfigSet();
 }
@@ -261,13 +289,13 @@ void DeviceWorker::deleteMedia(const QStringList &files) {
     }
 
     if (!device_ || !device_->is_connected()) {
-        emit error("Устройство не подключено");
+        emit error("Device not connected");
         return;
     }
 
     auto resp = device_->delete_media(filenames);
     if (!resp) {
-        emit error("Не удалось удалить медиа файлы");
+        emit error("Failed to delete media files");
         return;
     }
 
@@ -279,8 +307,12 @@ void DeviceWorker::deleteMedia(const QStringList &files) {
 }
 
 void DeviceWorker::uploadMedia(const QString &localPath) {
+    if (!panorama::Adb::is_available()) {
+        emit error("'adb' is not installed. Install it (e.g. sudo apt install android-tools-adb) and reconnect.");
+        return;
+    }
     if (!panorama::Adb::is_device_connected()) {
-        emit error("ADB устройство не найдено");
+        emit error("ADB device not found. Run 'adb devices' to check the device is listed.");
         return;
     }
 
@@ -330,14 +362,18 @@ void DeviceWorker::uploadMedia(const QString &localPath) {
 }
 
 void DeviceWorker::refreshMediaList() {
+    if (!panorama::Adb::is_available()) {
+        emit error("'adb' is not installed. Install it (e.g. sudo apt install android-tools-adb) and reconnect.");
+        return;
+    }
     if (!panorama::Adb::is_device_connected()) {
-        emit error("ADB устройство не найдено");
+        emit error("ADB device not found. Run 'adb devices' to check the device is listed.");
         return;
     }
 
     auto files = panorama::Adb::list_media();
     if (!files) {
-        emit error("Не удалось получить список файлов");
+        emit error("Failed to fetch file list");
         return;
     }
 
@@ -365,8 +401,10 @@ void DeviceWorker::setRotation(int degrees) {
 }
 
 void DeviceWorker::rebootDevice() {
-    // ADB reboot works, POST reboot doesn't
-    std::system("adb -s $(adb devices 2>/dev/null | grep TRYX | cut -f1) reboot 2>/dev/null");
+    // ADB reboot works on this device; the protocol-level POST reboot does not.
+    if (!panorama::Adb::reboot()) {
+        emit error("Failed to reboot device via ADB");
+    }
 }
 
 // --- DeviceManager ---
@@ -375,6 +413,12 @@ DeviceManager::DeviceManager(QObject *parent)
     : QObject(parent),
       worker_(new DeviceWorker),
       keepaliveTimer_(new QTimer(this)) {
+
+    // Seed the worker's brightness cache from the persisted config so that
+    // the first setScreenConfig() doesn't reset the device to a default.
+    if (auto cfg = panorama::ConfigManager::load_config()) {
+        worker_->seedBrightness(cfg->brightness);
+    }
 
     worker_->moveToThread(&workerThread_);
 

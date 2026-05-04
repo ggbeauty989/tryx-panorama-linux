@@ -1,18 +1,9 @@
 #pragma once
 
-#include <QWidget>
-#include <QListWidget>
-#include <QSlider>
-#include <QLabel>
-#include <QComboBox>
-#include <QPushButton>
-#include <QProgressBar>
-#include <QScrollArea>
-#include <QGridLayout>
-#include <QSet>
 #include <QFrame>
-
-class DeviceManager;
+#include <QLabel>
+#include <QPixmap>
+#include <QString>
 
 struct MediaEntry {
     QString filePath;
@@ -49,53 +40,5 @@ private:
     QLabel *infoLabel_;
 };
 
-class DisplayPage : public QWidget {
-    Q_OBJECT
-public:
-    explicit DisplayPage(DeviceManager *deviceMgr, QWidget *parent = nullptr);
-
-    static QString builtinMediaDir();
-
-signals:
-    void statusMessage(const QString &msg);
-
-private slots:
-    void onUploadClicked();
-    void onUploadBuiltinClicked();
-    void onSetDisplayClicked();
-    void onDeleteClicked();
-    void onRefreshClicked();
-    void onBrightnessChanged(int value);
-    void onMediaListUpdated(const QStringList &files);
-    void onMediaUploaded(const QString &filename);
-    void onMediaDeleted();
-    void onUploadStatus(const QString &status);
-    void onTileClicked(MediaTile *tile);
-
-private:
-    void setupUi();
-    void loadBuiltinMedia();
-    QPixmap extractThumbnail(const QString &videoPath, const QString &cachePath);
-
-    DeviceManager *deviceMgr_;
-    QListWidget *fileList_;
-    QSlider *brightnessSlider_;
-    QLabel *brightnessLabel_;
-    QComboBox *ratioCombo_;
-    QPushButton *uploadBtn_;
-    QPushButton *uploadBuiltinBtn_;
-    QPushButton *setDisplayBtn_;
-    QPushButton *deleteBtn_;
-    QPushButton *refreshBtn_;
-    QLabel *dropZone_;
-    QProgressBar *progressBar_;
-
-    QScrollArea *builtinScrollArea_;
-    QWidget *builtinGridWidget_;
-    QGridLayout *builtinGrid_;
-    QList<MediaTile *> tiles_;
-
-protected:
-    void dragEnterEvent(QDragEnterEvent *event) override;
-    void dropEvent(QDropEvent *event) override;
-};
+// Locate the built-in media directory (../media relative to the binary).
+QString builtinMediaDir();

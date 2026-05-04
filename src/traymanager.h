@@ -4,6 +4,7 @@
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <QAction>
+#include <QList>
 
 class TrayManager : public QObject {
     Q_OBJECT
@@ -35,6 +36,7 @@ private:
     QAction *showHideAction_;
     QAction *metricsAction_;
     QMenu *brightnessMenu_;
+    QList<QAction *> brightnessActions_;
 
     bool connected_ = false;
     bool metricsRunning_ = false;

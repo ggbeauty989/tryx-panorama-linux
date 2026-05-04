@@ -6,11 +6,10 @@
 #include <QDirIterator>
 #include <QRegularExpression>
 #include <QStorageInfo>
+#include <QProcess>
 
 SystemMonitor::SystemMonitor(QObject *parent)
-    : QObject(parent) {
-    readCpuCoreCount();
-}
+    : QObject(parent) {}
 
 void SystemMonitor::update() {
     metrics_.cpu.temperature = readCpuTemperature();
@@ -35,7 +34,9 @@ QString SystemMonitor::readSysFile(const QString &path) {
 
 QString SystemMonitor::findHwmonByName(const QString &name) {
     QDir hwmonDir("/sys/class/hwmon");
-    for (const auto &entry : hwmonDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+    // sysfs entries are symlinks, so QDir::Dirs (which uses lstat) misses
+    // them — enumerate every entry and let the per-file checks gate access.
+    for (const auto &entry : hwmonDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
         QString namePath = hwmonDir.filePath(entry) + "/name";
         if (readSysFile(namePath) == name) {
             return hwmonDir.filePath(entry);
@@ -45,21 +46,17 @@ QString SystemMonitor::findHwmonByName(const QString &name) {
 }
 
 double SystemMonitor::readCpuTemperature() {
-    // AMD Ryzen: k10temp or zenpower
-    QString hwmon = findHwmonByName("k10temp");
-    if (hwmon.isEmpty()) {
-        hwmon = findHwmonByName("zenpower");
+    // AMD Ryzen first (k10temp / zenpower), then Intel (coretemp).
+    // coretemp's temp1_input is the package temperature.
+    for (const QString &name : {"k10temp", "zenpower", "coretemp"}) {
+        QString hwmon = findHwmonByName(name);
+        if (hwmon.isEmpty()) continue;
+        QString val = readSysFile(hwmon + "/temp1_input");
+        if (!val.isEmpty()) {
+            return val.toDouble() / 1000.0;
+        }
     }
-    if (hwmon.isEmpty()) {
-        return 0.0;
-    }
-
-    // Tctl temperature
-    QString val = readSysFile(hwmon + "/temp1_input");
-    if (val.isEmpty()) {
-        return 0.0;
-    }
-    return val.toDouble() / 1000.0;
+    return 0.0;
 }
 
 double SystemMonitor::readCpuUsage() {
@@ -104,7 +101,8 @@ double SystemMonitor::readCpuFrequency() {
     double totalFreq = 0.0;
     int count = 0;
 
-    for (const auto &entry : cpuDir.entryList(QStringList{"cpu[0-9]*"}, QDir::Dirs)) {
+    for (const auto &entry : cpuDir.entryList(QStringList{"cpu[0-9]*"},
+                                                QDir::AllEntries | QDir::NoDotAndDotDot)) {
         QString freqPath = cpuDir.filePath(entry) + "/cpufreq/scaling_cur_freq";
         QString val = readSysFile(freqPath);
         if (!val.isEmpty()) {
@@ -118,15 +116,50 @@ double SystemMonitor::readCpuFrequency() {
 
 int SystemMonitor::readCpuCoreCount() {
     QDir cpuDir("/sys/devices/system/cpu");
-    int count = cpuDir.entryList(QStringList{"cpu[0-9]*"}, QDir::Dirs).size();
+    int count = cpuDir.entryList(QStringList{"cpu[0-9]*"},
+                                  QDir::AllEntries | QDir::NoDotAndDotDot).size();
     return count > 0 ? count : 1;
+}
+
+static void appendNvidiaGpus(QVector<GpuMetrics> &out) {
+    // nvidia-smi is the only stable user-space source for NVIDIA metrics on
+    // Linux. Skip silently if the binary isn't installed (open-source nouveau
+    // users won't have it, and the AMD path already covers them via sysfs).
+    QProcess proc;
+    proc.start("nvidia-smi", {
+        "--query-gpu=name,temperature.gpu,utilization.gpu,clocks.gr,memory.used,memory.total",
+        "--format=csv,noheader,nounits"
+    });
+    if (!proc.waitForStarted(500)) return;
+    if (!proc.waitForFinished(1000)) {
+        proc.kill();
+        return;
+    }
+    if (proc.exitCode() != 0) return;
+
+    const QString output = QString::fromUtf8(proc.readAllStandardOutput());
+    for (const QString &rawLine : output.split('\n', Qt::SkipEmptyParts)) {
+        const QStringList parts = rawLine.split(',');
+        if (parts.size() < 6) continue;
+
+        GpuMetrics gpu;
+        gpu.name = parts[0].trimmed();
+        gpu.temperature = parts[1].trimmed().toDouble();
+        gpu.usagePercent = parts[2].trimmed().toDouble();
+        gpu.frequencyMHz = parts[3].trimmed().toDouble();
+        gpu.vramUsedMB = parts[4].trimmed().toLongLong();
+        gpu.vramTotalMB = parts[5].trimmed().toLongLong();
+        gpu.voltageMV = 0.0;  // not exposed by nvidia-smi in this query
+        out.append(gpu);
+    }
 }
 
 QVector<GpuMetrics> SystemMonitor::readGpuMetrics() {
     QVector<GpuMetrics> gpus;
 
     QDir drmDir("/sys/class/drm");
-    for (const auto &entry : drmDir.entryList(QStringList{"card[0-9]*"}, QDir::Dirs)) {
+    for (const auto &entry : drmDir.entryList(QStringList{"card[0-9]*"},
+                                                QDir::AllEntries | QDir::NoDotAndDotDot)) {
         // Skip render nodes (card0-* etc)
         if (entry.contains('-')) {
             continue;
@@ -154,7 +187,7 @@ QVector<GpuMetrics> SystemMonitor::readGpuMetrics() {
 
         // Temperature via hwmon
         QDir hwmonDir(cardPath + "/hwmon");
-        for (const auto &hwEntry : hwmonDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        for (const auto &hwEntry : hwmonDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
             QString tempPath = hwmonDir.filePath(hwEntry) + "/temp1_input";
             QString val = readSysFile(tempPath);
             if (!val.isEmpty()) {
@@ -181,7 +214,7 @@ QVector<GpuMetrics> SystemMonitor::readGpuMetrics() {
 
         // GPU voltage from hwmon in0_input (millivolts)
         QDir hwmonDirVolt(cardPath + "/hwmon");
-        for (const auto &hwEntry : hwmonDirVolt.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        for (const auto &hwEntry : hwmonDirVolt.entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
             QString voltPath = hwmonDirVolt.filePath(hwEntry) + "/in0_input";
             QString voltVal = readSysFile(voltPath);
             if (!voltVal.isEmpty()) {
@@ -202,6 +235,8 @@ QVector<GpuMetrics> SystemMonitor::readGpuMetrics() {
 
         gpus.append(gpu);
     }
+
+    appendNvidiaGpus(gpus);
 
     return gpus;
 }
@@ -300,7 +335,9 @@ DiskMetrics SystemMonitor::readDiskMetrics() {
 double SystemMonitor::readDiskTemperature() {
     double maxTemp = 0;
     QDir hwmonDir("/sys/class/hwmon");
-    for (const auto &entry : hwmonDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+    // sysfs entries are symlinks, so QDir::Dirs (which uses lstat) misses
+    // them — enumerate every entry and let the per-file checks gate access.
+    for (const auto &entry : hwmonDir.entryList(QDir::AllEntries | QDir::NoDotAndDotDot)) {
         QString namePath = hwmonDir.filePath(entry) + "/name";
         if (readSysFile(namePath) == "nvme") {
             QString tempPath = hwmonDir.filePath(entry) + "/temp1_input";

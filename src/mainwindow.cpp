@@ -33,6 +33,18 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow() = default;
 
+bool MainWindow::shouldStartMinimized() const {
+    return settingsPage_ && settingsPage_->startMinimized();
+}
+
+void MainWindow::notifyStartedInTray() {
+    if (trayMgr_) {
+        trayMgr_->showNotification(
+            "TRYX Panorama",
+            "Running in the system tray. Click the icon to open the window.");
+    }
+}
+
 void MainWindow::setupUi() {
     auto *centralWidget = new QWidget;
     auto *mainLayout = new QHBoxLayout(centralWidget);
@@ -144,6 +156,14 @@ void MainWindow::setupConnections() {
 
                 deviceMgr_->startKeepalive(settingsPage_->keepaliveInterval());
                 deviceMgr_->refreshMediaList();
+
+                // The cooler firmware remembers the last screen layout, so we
+                // don't have to resend the config — but the live values come
+                // from periodic POST all packets, which only flow while the
+                // metricsTimer is running. Resume it now (no-op if nothing
+                // is selected) so the display isn't frozen until the user
+                // hits Save manually.
+                panoramaPage_->startMetrics();
             });
 
     connect(deviceMgr_, &DeviceManager::deviceDisconnected, this, [this]() {

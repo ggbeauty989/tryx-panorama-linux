@@ -57,14 +57,13 @@ private slots:
     // Pre-set tab
     void onMetricToggled();
     void onChooseTextColor();
+    void onChooseCustomTextColor();
     void onPresetSave();
     void onTileClicked(MediaTile *tile);
 
     // Customization tab
     void onUploadClicked();
     void onUploadBuiltinClicked();
-    void onSetDisplayClicked();
-    void onDeleteClicked();
     void onRefreshClicked();
     void onMediaListUpdated(const QStringList &files);
     void onMediaUploaded(const QString &filename);
@@ -93,6 +92,10 @@ private:
 
     void rebuildPresetGrid();
     int calculateGridColumns() const;
+
+    // Aggregates metric selections from every active source (preset checkboxes,
+    // customization full-screen menu, and split-mode left/right menus).
+    QStringList activeMetricLabels() const;
 
     static QString builtinMediaDir();
     static QString presetIdForName(const QString &name);
@@ -141,12 +144,8 @@ private:
     // Customization tab - file management
     QListWidget *fileList_;
     QComboBox *ratioCombo_;
-    QComboBox *screenModeCombo_;
     QComboBox *playModeCombo_;
     QPushButton *uploadBtn_;
-    QPushButton *setDisplayBtn_;
-    QPushButton *deleteBtn_;
-    QPushButton *refreshBtn_;
     QLabel *dropZone_;
     QProgressBar *progressBar_;
 
@@ -159,6 +158,14 @@ private:
     QToolButton *customMetricsBtn_;
     QMenu *customMetricsMenu_;
     QList<QCheckBox *> customMetricCheckboxes_;
+
+    // Customization tab - Full-Screen display settings (mirror of Pre-set tab)
+    QComboBox *customPositionCombo_;
+    QComboBox *customAlignCombo_;
+    QPushButton *customTextColorBtn_;
+    QColor customTextColor_ = QColor("#FFFFFF");
+    QCheckBox *customCpuBadge_;
+    QCheckBox *customGpuBadge_;
 
     // Customization tab - user media grid
     QScrollArea *customScrollArea_;

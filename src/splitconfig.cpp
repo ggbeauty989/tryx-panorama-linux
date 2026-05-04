@@ -103,7 +103,10 @@ void SplitConfigWidget::setupUi() {
     leftMetricsMenu_ = new QMenu(this);
     for (const auto &label : METRIC_LABELS) {
         auto *wa = new QWidgetAction(leftMetricsMenu_);
-        auto *cb = new QCheckBox(label);
+        QString display = label;
+        display.replace('&', "&&");
+        auto *cb = new QCheckBox(display);
+        cb->setProperty("metricLabel", label);
         cb->setStyleSheet("QCheckBox { color: #fff; padding: 4px 8px; } QCheckBox:hover { background: #3a3a4e; }");
         wa->setDefaultWidget(cb);
         leftMetricsMenu_->addAction(wa);
@@ -137,7 +140,10 @@ void SplitConfigWidget::setupUi() {
     rightMetricsMenu_ = new QMenu(this);
     for (const auto &label : METRIC_LABELS) {
         auto *wa = new QWidgetAction(rightMetricsMenu_);
-        auto *cb = new QCheckBox(label);
+        QString display = label;
+        display.replace('&', "&&");
+        auto *cb = new QCheckBox(display);
+        cb->setProperty("metricLabel", label);
         cb->setStyleSheet("QCheckBox { color: #fff; padding: 4px 8px; } QCheckBox:hover { background: #3a3a4e; }");
         wa->setDefaultWidget(cb);
         rightMetricsMenu_->addAction(wa);
@@ -188,7 +194,7 @@ QStringList SplitConfigWidget::leftMetrics() const {
     QStringList list;
     for (auto *c : leftMetricCheckboxes_) {
         if (c->isChecked())
-            list << c->text();
+            list << c->property("metricLabel").toString();
     }
     return list;
 }
@@ -197,7 +203,7 @@ QStringList SplitConfigWidget::rightMetrics() const {
     QStringList list;
     for (auto *c : rightMetricCheckboxes_) {
         if (c->isChecked())
-            list << c->text();
+            list << c->property("metricLabel").toString();
     }
     return list;
 }

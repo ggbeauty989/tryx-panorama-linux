@@ -33,10 +33,13 @@ void TrayManager::setupTray() {
 
     trayMenu_->addSeparator();
 
-    // Brightness submenu
+    // Brightness submenu (checkable so the active level is visible at a glance)
     brightnessMenu_ = trayMenu_->addMenu("Brightness");
     for (int val : {25, 50, 75, 100}) {
         auto *action = brightnessMenu_->addAction(QString("%1%").arg(val));
+        action->setCheckable(true);
+        action->setData(val);
+        brightnessActions_.append(action);
         connect(action, &QAction::triggered, this, [this, val]() {
             emit brightnessChangeRequested(val);
         });
@@ -92,6 +95,9 @@ void TrayManager::setMetricsRunning(bool running) {
 
 void TrayManager::setBrightnessValue(int value) {
     brightness_ = value;
+    for (auto *action : brightnessActions_) {
+        action->setChecked(action->data().toInt() == value);
+    }
     updateTooltip();
 }
 

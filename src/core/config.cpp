@@ -34,6 +34,15 @@ int extract_number(const picojson::object& node, const std::string& field,
   return fallback;
 }
 
+bool extract_bool(const picojson::object& node, const std::string& field,
+                  bool fallback) {
+  auto pos = node.find(field);
+  if (pos != node.end() && pos->second.is<bool>()) {
+    return pos->second.get<bool>();
+  }
+  return fallback;
+}
+
 picojson::value to_json_number(int n) {
   return picojson::value(static_cast<double>(n));
 }
@@ -124,6 +133,11 @@ std::optional<Config> ConfigManager::load_config() {
   cfg.brightness = extract_number(root, "brightness", cfg.brightness);
   cfg.keepalive_interval =
       extract_number(root, "keepalive_interval", cfg.keepalive_interval);
+  cfg.minimize_to_tray =
+      extract_bool(root, "minimize_to_tray", cfg.minimize_to_tray);
+  cfg.start_minimized =
+      extract_bool(root, "start_minimized", cfg.start_minimized);
+  cfg.autostart = extract_bool(root, "autostart", cfg.autostart);
 
   return cfg;
 }
@@ -136,6 +150,9 @@ bool ConfigManager::save_config(const Config& config) {
   root["port"] = to_json_text(config.port);
   root["brightness"] = to_json_number(config.brightness);
   root["keepalive_interval"] = to_json_number(config.keepalive_interval);
+  root["minimize_to_tray"] = picojson::value(config.minimize_to_tray);
+  root["start_minimized"] = picojson::value(config.start_minimized);
+  root["autostart"] = picojson::value(config.autostart);
 
   std::string serialized = picojson::value(root).serialize();
   return write_json_file(get_config_path(), serialized);

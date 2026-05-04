@@ -32,6 +32,7 @@ private slots:
 private:
     void setupUi();
     void loadSettings();
+    void applyAutostart(bool enable);
 
     DeviceManager *deviceMgr_;
     QComboBox *portCombo_;

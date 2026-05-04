@@ -6,6 +6,11 @@
 
 namespace panorama {
 
+namespace {
+// Cached at namespace scope so reset_cache() can clear it after a disconnect.
+std::string g_cached_serial;
+}  // namespace
+
 std::string Adb::escape_shell_arg(const std::string& input) {
   bool needs_quoting = false;
   const char* unsafe_chars = " \t'\"\\$`!#&|;(){}[]<>?*~";
@@ -63,12 +68,11 @@ std::optional<std::string> Adb::run_command(
   std::string commandline = "adb";
 
   // Auto-select TRYX device if multiple devices connected
-  static std::string cached_serial;
-  if (cached_serial.empty()) {
-    cached_serial = find_tryx_serial();
+  if (g_cached_serial.empty()) {
+    g_cached_serial = find_tryx_serial();
   }
-  if (!cached_serial.empty() && (args.empty() || args[0] != "devices")) {
-    commandline += " -s " + escape_shell_arg(cached_serial);
+  if (!g_cached_serial.empty() && (args.empty() || args[0] != "devices")) {
+    commandline += " -s " + escape_shell_arg(g_cached_serial);
   }
 
   for (const auto& token : args) {
@@ -90,6 +94,13 @@ std::optional<std::string> Adb::run_command(
   pclose(proc);
 
   return collected;
+}
+
+bool Adb::is_available() {
+  // `command -v` returns 0 if the program exists. Going through the shell
+  // avoids re-implementing PATH lookup here.
+  int rc = std::system("command -v adb >/dev/null 2>&1");
+  return rc == 0;
 }
 
 bool Adb::is_device_connected() {
@@ -183,6 +194,16 @@ bool Adb::remove(const std::string& filename) {
   auto output = run_command({"shell", "rm", target});
   return output.has_value() &&
          output.value().find("No such file") == std::string::npos;
+}
+
+bool Adb::reboot() {
+  auto output = run_command({"reboot"});
+  // adb reboot succeeds silently; treat any non-error output as success.
+  return output.has_value() && output.value().find("error:") == std::string::npos;
+}
+
+void Adb::reset_cache() {
+  g_cached_serial.clear();
 }
 
 }  // namespace panorama

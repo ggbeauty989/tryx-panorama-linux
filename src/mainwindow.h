@@ -17,6 +17,9 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+    bool shouldStartMinimized() const;
+    void notifyStartedInTray();
+
 protected:
     void closeEvent(QCloseEvent *event) override;
 

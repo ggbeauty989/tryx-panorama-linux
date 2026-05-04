@@ -18,6 +18,8 @@ public:
     explicit DeviceWorker(QObject *parent = nullptr);
     ~DeviceWorker();
 
+    void seedBrightness(int value) { currentBrightness_ = value; }
+
 public slots:
     void connectDevice(const QString &port);
     void disconnectDevice();
@@ -59,6 +61,7 @@ signals:
 
 private:
     std::unique_ptr<panorama::Device> device_;
+    int currentBrightness_ = 75;
 };
 
 class DeviceManager : public QObject {

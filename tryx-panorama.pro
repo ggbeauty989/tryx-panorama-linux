@@ -43,5 +43,3 @@ SOURCES += \
     src/traymanager.cpp \
     src/mainwindow.cpp \
     src/splitconfig.cpp
-
-RESOURCES += resources/resources.qrc
