@@ -10,6 +10,7 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 | Panorama SE 240 | Should work (same display protocol) |
 | Panorama | Should work |
 | Panorama WB | Should work |
+| Panorama 360 | Tested |
 
 <div align="center">
 
