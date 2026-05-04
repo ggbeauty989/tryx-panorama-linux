@@ -7,26 +7,10 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 | Model | Status |
 |-------|--------|
 | Panorama SE 360 | Tested |
+| Panorama 360 | Tested |
 | Panorama SE 240 | Should work (same display protocol) |
 | Panorama | Should work |
 | Panorama WB | Should work |
-| Panorama 360 | Tested |
-
-<div align="center">
-
-
-</div>
-
-## What was done
-
-- Unpacking KANALI (official Windows app) resources to extract built-in media library (15 videos)
-- Full protocol analysis to discover device commands for system metrics display
-- Implemented working real-time CPU/GPU/Disk temperature monitoring on the cooler screen
-- Built complete Qt6 GUI from scratch (Homepage, Panorama, Settings pages)
-- Auto-detection of CPU/GPU hardware names for badge display
-- Auto-conversion of non-MP4 media formats (WebM, MKV, AVI, GIF) before upload to device
-- Fixed serial communication issues (timeouts, wrong command formats, broken ADB quoting)
-- Restructured into a single qmake project
 
 ## Features
 
@@ -36,10 +20,11 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 - Hardware name badges (auto-detected from system)
 - Brightness control (0-100)
 - Display settings: position, alignment, color, filter
+- Screen splitting configuration
 - Keepalive daemon for persistent display
 - Auto-detects device (scans /dev/ttyACM*)
 - System tray integration (KDE Plasma native)
-- Minimize to tray on close, start minimized, and autostart on login (systemd user service)
+- Minimize to tray on close, start minimized, autostart on login (systemd user service)
 - Consistent dark theme across all dialogs and widgets
 - Settings persistence between sessions
 - Async device communication (non-blocking GUI)
@@ -52,9 +37,9 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 - qmake6
 
 **Runtime:**
-- `adb` (android-tools) - file transfer
-- `ffmpeg` - media conversion
-- `glxinfo` (mesa-utils) - GPU name detection (optional)
+- `ffmpeg` — media conversion
+- `adb` (android-tools) — required for uploading and managing media on the device. Serial-based features (metrics, brightness, presets) keep working without it.
+- `glxinfo` (mesa-utils) — GPU name detection (optional)
 
 **Permissions:**
 - User must be in `dialout` group (or `uucp` on Arch) for serial access
@@ -62,12 +47,26 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 ## Build
 
 ```bash
-git clone https://gitlab.com/dxvsi/tryx-panorama-linux.git
+git clone https://github.com/ggbeauty989/tryx-panorama-linux.git
 cd tryx-panorama-linux
 qmake6
 make -j$(nproc)
 ./build/tryx-panorama-manager
 ```
+
+## Install
+
+To run the binary from anywhere and enable autostart on login:
+
+```bash
+mkdir -p ~/.local/bin ~/.config/systemd/user
+cp build/tryx-panorama-manager ~/.local/bin/
+cp systemd/tryx-panorama.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now tryx-panorama.service
+```
+
+Alternatively, leave the service disabled and tick **Autostart on login** in the Settings page.
 
 ## Project Structure
 
@@ -94,11 +93,24 @@ systemd/             # User service unit for autostart
 | Distro | Kernel | CPU | GPU1 | GPU2 |
 |--------|--------|-----|------|------|
 | Fedora 43 | 6.19.10 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
-| Ubuntu 26.04 | 7.0.0-15 | AMD Ryzen 7 9800X3D | AMD Radeon RX 9070 XT Nitro+ |
+| Ubuntu 26.04 | 7.0.0-15 | AMD Ryzen 7 9800X3D | AMD Radeon RX 9070 XT Nitro+ | — |
+
+## Background
+
+This project was reverse-engineered from KANALI (the official Windows app):
+
+- Unpacked KANALI resources to extract the built-in media library (15 videos)
+- Full protocol analysis to discover device commands for system metrics display
+- Implemented real-time CPU/GPU/Disk temperature monitoring on the cooler screen
+- Built the Qt6 GUI from scratch (Home, Panorama, Display, Screen Splitting, Rota, Settings)
+- Auto-detection of CPU/GPU hardware names for badge display
+- Auto-conversion of non-MP4 media formats (WebM, MKV, AVI, GIF) before upload to device
+- Fixed serial communication issues (timeouts, wrong command formats, broken ADB quoting)
+- Restructured into a single qmake project
 
 ## License
 
-MIT
+[MIT](LICENSE)
 
 ## Credits
 
