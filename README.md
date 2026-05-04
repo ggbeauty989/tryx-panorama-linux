@@ -39,6 +39,8 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 - Keepalive daemon for persistent display
 - Auto-detects device (scans /dev/ttyACM*)
 - System tray integration (KDE Plasma native)
+- Minimize to tray on close, start minimized, and autostart on login (systemd user service)
+- Consistent dark theme across all dialogs and widgets
 - Settings persistence between sessions
 - Async device communication (non-blocking GUI)
 
@@ -75,13 +77,16 @@ src/
   main.cpp           # Entry point
   mainwindow.*       # Main window with navigation
   panoramapage.*     # Display + metrics configuration
+  displaypage.*      # Full-screen media browser and upload
+  splitconfig.*      # Screen splitting configuration
   homepage.*         # System monitoring dashboard
-  settingspage.*     # App settings
+  settingspage.*     # App settings (port, tray, autostart)
   devicemanager.*    # Async device communication
   systemmonitor.*    # System metrics reader
   traymanager.*      # System tray
 include/panorama/    # Protocol headers
 media/               # Built-in videos
+systemd/             # User service unit for autostart
 ```
 
 ## Tested on
