@@ -94,6 +94,7 @@ systemd/             # User service unit for autostart
 | Distro | Kernel | CPU | GPU1 | GPU2 |
 |--------|--------|-----|------|------|
 | Fedora 43 | 6.19.10 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
+| Ubuntu 26.04 | 7.0.0-15 | AMD Ryzen 7 9800X3D | AMD Radeon RX 9070 XT Nitro+ |
 
 ## License
 
