@@ -17,6 +17,7 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("TRYX Panorama Manager");
     app.setOrganizationName("DXVSI");
+    app.setQuitOnLastWindowClosed(false);
 
     // Force a dark palette so unstyled widgets (Settings group boxes, message
     // dialogs, file picker, etc.) don't render with the system light theme,
