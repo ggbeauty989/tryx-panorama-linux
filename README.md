@@ -23,7 +23,7 @@ Qt6 GUI application for managing TRYX Panorama AIO cooler displays on Linux.
 - Screen splitting configuration
 - Keepalive daemon for persistent display
 - Auto-detects device (scans /dev/ttyACM*)
-- System tray integration (KDE Plasma native)
+- System tray integration (requires tray support — see Troubleshooting below)
 - Minimize to tray on close, start minimized, autostart on login (systemd user service)
 - Consistent dark theme across all dialogs and widgets
 - Settings persistence between sessions
@@ -94,6 +94,53 @@ systemd/             # User service unit for autostart
 |--------|--------|-----|------|------|
 | Fedora 43 | 6.19.10 | AMD Ryzen 9 9950X3D | AMD Radeon RX 7900 XTX | NVIDIA GeForce RTX 5060 Ti |
 | Ubuntu 26.04 | 7.0.0-15 | AMD Ryzen 7 9800X3D | AMD Radeon RX 9070 XT Nitro+ | — |
+
+## Troubleshooting
+
+### L'app si chiude completamente invece di restare in background (system tray)
+
+L'applicazione usa `QSystemTrayIcon::isSystemTrayAvailable()` per determinare se può ridursi a icona nella system tray quando la finestra viene chiusa.
+Se la system tray **non è disponibile**, il `closeEvent` di `MainWindow` forza la chiusura completa del processo chiamando `qApp->quit()`.
+
+Questo accade tipicamente su:
+
+- **GNOME** (da Ubuntu 17.10+ le tray icon X11 legacy non sono supportate nativamente)
+- **Wayland puro** senza compatibilità XWayland per le tray icon
+- Alcune configurazioni di **KDE Plasma** su Wayland
+
+#### Soluzioni
+
+**GNOME / Ubuntu:**
+```bash
+# Installa l'estensione AppIndicator (riavvia la sessione dopo)
+sudo apt install gnome-shell-extension-appindicator
+```
+Oppure installa l'estensione **"Tray Icons Reloaded"** da [GNOME Extensions](https://extensions.gnome.org/).
+
+**KDE Plasma:**
+Verifica che la system tray sia attiva nel pannello (tasto destro sul pannello → "Add Widgets" → "System Tray").
+
+**Avvio minimizzato:**
+Se la tray funziona, puoi avviare l'app direttamente in background con:
+```bash
+tryx-panorama-manager --hidden
+```
+
+**Systemd (autostart):**
+Il servizio systemd incluso (`systemd/tryx-panorama.service`) avvia l'app all'accesso. Assicurati che la tray sia funzionante prima di abilitarlo:
+```bash
+systemctl --user enable --now tryx-panorama.service
+```
+
+#### Comportamento tecnico (per sviluppatori)
+
+Il flusso di chiusura è gestito in `src/mainwindow.cpp` (`closeEvent`):
+- Se `TrayManager::isAvailable()` restituisce `true`: la finestra viene nascosta (`hide()`), l'evento di chiusura viene ignorato (`event->ignore()`), e l'app rimane in esecuzione con l'icona nella tray.
+- Se `false`: viene chiamato `event->accept()` + `qApp->quit()`, terminando completamente il processo.
+
+`TrayManager::isAvailable()` delega a `QSystemTrayIcon::isSystemTrayAvailable()` (definita in `src/traymanager.cpp`).
+
+In `main.cpp` è impostato `QApplication::setQuitOnLastWindowClosed(false)` per evitare che Qt termini l'app quando la finestra viene nascosta — ma questo viene sovrascritto dal `closeEvent` quando la tray non è presente.
 
 ## Background
 

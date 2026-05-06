@@ -78,6 +78,11 @@ void TrayManager::hide() {
     trayIcon_->hide();
 }
 
+void TrayManager::setWindowVisible(bool visible) {
+    windowVisible_ = visible;
+    showHideAction_->setText(visible ? "Hide" : "Show");
+}
+
 void TrayManager::showNotification(const QString &title, const QString &message) {
     trayIcon_->showMessage(title, message, QSystemTrayIcon::Information, 3000);
 }

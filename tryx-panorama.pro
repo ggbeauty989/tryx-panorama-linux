@@ -28,6 +28,7 @@ HEADERS += \
     src/panoramapage.h \
     src/displaypage.h \
     src/settingspage.h \
+    src/youtubedlpage.h \
     src/traymanager.h \
     src/mainwindow.h \
     src/splitconfig.h
@@ -40,6 +41,7 @@ SOURCES += \
     src/panoramapage.cpp \
     src/displaypage.cpp \
     src/settingspage.cpp \
+    src/youtubedlpage.cpp \
     src/traymanager.cpp \
     src/mainwindow.cpp \
     src/splitconfig.cpp

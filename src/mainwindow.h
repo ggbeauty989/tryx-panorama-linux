@@ -10,6 +10,7 @@ class Homepage;
 class PanoramaPage;
 class SettingsPage;
 class TrayManager;
+class YoutubeDlPage;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -31,6 +32,7 @@ private:
     Homepage *homepage_;
     PanoramaPage *panoramaPage_;
     SettingsPage *settingsPage_;
+    YoutubeDlPage *youtubeDlPage_;
     TrayManager *trayMgr_;
 
     QStackedWidget *stack_;

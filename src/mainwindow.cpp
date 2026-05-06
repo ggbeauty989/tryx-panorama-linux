@@ -4,6 +4,7 @@
 #include "panoramapage.h"
 #include "settingspage.h"
 #include "traymanager.h"
+#include "youtubedlpage.h"
 
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -39,6 +40,7 @@ bool MainWindow::shouldStartMinimized() const {
 
 void MainWindow::notifyStartedInTray() {
     if (trayMgr_) {
+        trayMgr_->setWindowVisible(false);
         trayMgr_->showNotification(
             "TRYX Panorama",
             "Running in the system tray. Click the icon to open the window.");
@@ -58,6 +60,7 @@ void MainWindow::setupUi() {
     navList_->addItem("Homepage");
     navList_->addItem("Panorama");
     navList_->addItem("Rota");
+    navList_->addItem("YouTube DL");
     navList_->addItem("Settings");
     navList_->setCurrentRow(0);
 
@@ -88,6 +91,7 @@ void MainWindow::setupUi() {
     stack_ = new QStackedWidget;
     homepage_ = new Homepage;
     panoramaPage_ = new PanoramaPage(deviceMgr_);
+    youtubeDlPage_ = new YoutubeDlPage;
     settingsPage_ = new SettingsPage(deviceMgr_);
 
     // Rota placeholder
@@ -131,6 +135,7 @@ void MainWindow::setupUi() {
     stack_->addWidget(homepage_);
     stack_->addWidget(panoramaPage_);
     stack_->addWidget(rotaPage);
+    stack_->addWidget(youtubeDlPage_);
     stack_->addWidget(settingsPage_);
 
     mainLayout->addWidget(stack_, 1);
@@ -191,8 +196,12 @@ void MainWindow::setupConnections() {
         show();
         raise();
         activateWindow();
+        trayMgr_->setWindowVisible(true);
     });
-    connect(trayMgr_, &TrayManager::hideWindowRequested, this, &QMainWindow::hide);
+    connect(trayMgr_, &TrayManager::hideWindowRequested, this, [this]() {
+        hide();
+        trayMgr_->setWindowVisible(false);
+    });
     connect(trayMgr_, &TrayManager::quitRequested, this, [this]() {
         minimizeToTray_ = false;
         close();
@@ -212,6 +221,7 @@ void MainWindow::setupConnections() {
 void MainWindow::closeEvent(QCloseEvent *event) {
     if (minimizeToTray_ && settingsPage_->minimizeToTray()) {
         hide();
+        trayMgr_->setWindowVisible(false);
         event->ignore();
     } else {
         panoramaPage_->stopMetrics();

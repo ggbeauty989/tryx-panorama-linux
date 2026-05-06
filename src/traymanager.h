@@ -14,6 +14,7 @@ public:
     void show();
     void hide();
     void showNotification(const QString &title, const QString &message);
+    void setWindowVisible(bool visible);
 
 public slots:
     void setConnected(bool connected);
