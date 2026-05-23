@@ -229,7 +229,7 @@ void PanoramaPage::setupPresetTab(QWidget *parent) {
     loadBuiltinMedia();
 
     // System Information Display
-    auto *siLabel = new QLabel("System Information Display | Select up to 3 items");
+    auto *siLabel = new QLabel(QString("System Information Display | Select up to %1 items").arg(MAX_METRICS));
     QFont siFont = siLabel->font();
     siFont.setPointSize(11);
     siFont.setBold(true);
@@ -280,7 +280,7 @@ void PanoramaPage::setupPresetTab(QWidget *parent) {
     }
     layout->addLayout(metricsGrid);
 
-    selectionCountLabel_ = new QLabel("Selected: 0 / 3");
+    selectionCountLabel_ = new QLabel(QString("Selected: 0 / %1").arg(MAX_METRICS));
     selectionCountLabel_->setStyleSheet("color: #888;");
     layout->addWidget(selectionCountLabel_);
 
@@ -395,7 +395,7 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
     fsMetricsLabel->setStyleSheet("color: #aaa; font-size: 11px;");
 
     customMetricsBtn_ = new QToolButton;
-    customMetricsBtn_->setText(QString::fromUtf8("0 / 3 \u25BC"));
+    customMetricsBtn_->setText(QString::fromUtf8("0 / %1 \u25BC").arg(MAX_METRICS));
     customMetricsBtn_->setPopupMode(QToolButton::InstantPopup);
     customMetricsBtn_->setStyleSheet(
         "QToolButton { background: #2a2a3e; color: #fff; border: 1px solid #4a4a5e; "
@@ -426,12 +426,12 @@ void PanoramaPage::setupCustomizationTab(QWidget *parent) {
             int count = 0;
             for (auto *c : customMetricCheckboxes_)
                 if (c->isChecked()) count++;
-            if (count > 3) {
+            if (count > MAX_METRICS) {
                 auto *s = qobject_cast<QCheckBox *>(QObject::sender());
                 if (s) s->setChecked(false);
                 return;
             }
-            customMetricsBtn_->setText(QString::fromUtf8("%1 / 3 \u25BC").arg(count));
+            customMetricsBtn_->setText(QString::fromUtf8("%1 / %2 \u25BC").arg(count).arg(MAX_METRICS));
         });
     }
     customMetricsBtn_->setMenu(customMetricsMenu_);
@@ -699,11 +699,11 @@ void PanoramaPage::onMetricToggled() {
         if (opt.checkbox->isChecked()) count++;
     }
 
-    selectionCountLabel_->setText(QString("Selected: %1 / 3").arg(count));
+    selectionCountLabel_->setText(QString("Selected: %1 / %2").arg(count).arg(MAX_METRICS));
 
     for (auto &opt : metricOptions_) {
         if (!opt.checkbox->isChecked()) {
-            opt.checkbox->setEnabled(count < 3);
+            opt.checkbox->setEnabled(count < MAX_METRICS);
         }
     }
 }
@@ -940,7 +940,7 @@ void PanoramaPage::restorePageState() {
         int count = 0;
         for (auto *cb : customMetricCheckboxes_) if (cb->isChecked()) count++;
         if (customMetricsBtn_) {
-            customMetricsBtn_->setText(QString::fromUtf8("%1 / 3 ▼").arg(count));
+            customMetricsBtn_->setText(QString::fromUtf8("%1 / %2 ▼").arg(count).arg(MAX_METRICS));
         }
     }
 

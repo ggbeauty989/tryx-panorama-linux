@@ -30,6 +30,7 @@
 #include "systemmonitor.h"
 #include "splitconfig.h"
 
+
 class DeviceManager;
 
 struct MediaEntry;

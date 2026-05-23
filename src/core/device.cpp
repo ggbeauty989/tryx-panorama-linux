@@ -57,6 +57,8 @@ std::optional<std::string> Device::find_device(bool verbose) {
   }
 
   if (candidates.empty()) {
+    std::cerr << "[device] No /dev/ttyACM* devices found. "
+              << "Ensure the TRYX Panorama is connected via USB.\n";
     if (verbose) {
       std::cerr << "No /dev/ttyACM* devices found\n";
     }
@@ -78,6 +80,8 @@ std::optional<std::string> Device::find_device(bool verbose) {
 
     Device dev(port, false);
     if (!dev.connect()) {
+      std::cerr << "[device] Failed to open " << port
+                << " - check permissions (sudo usermod -aG dialout $USER)\n";
       if (verbose) {
         std::cout << "failed to open\n";
       }
@@ -363,7 +367,7 @@ std::optional<Response> Device::set_screen_config(const ScreenConfig& config) {
     settings_arr.push_back(picojson::value(build_settings(config.settings2)));
     cfg["settings"] = picojson::value(settings_arr);
 
-    // sysinfoDisplay as JSON array of 2 arrays
+    // sysinfoDisplay as JSON array of 2 flat arrays (one per side)
     picojson::array sysinfo_outer;
 
     picojson::array sysinfo_left;
@@ -380,7 +384,7 @@ std::optional<Response> Device::set_screen_config(const ScreenConfig& config) {
 
     cfg["sysinfoDisplay"] = picojson::value(sysinfo_outer);
   } else {
-    // Full Screen: single settings object, single sysinfo array
+    // Full Screen: single settings object, single flat sysinfo array
     cfg["settings"] = picojson::value(build_settings(config.settings));
 
     picojson::array sysinfo_arr;
@@ -409,7 +413,7 @@ std::optional<Response> Device::set_screen_config(const ScreenConfig& config) {
 std::optional<Response> Device::set_sysinfo_display(const ScreenConfig& config) {
   picojson::object obj;
 
-  // Device expects "items" key, not "sysinfoDisplay"
+  // Device expects "items" key, flat array of label strings
   picojson::array items_arr;
   for (const auto& label : config.sysinfo_display) {
     items_arr.push_back(picojson::value(label));

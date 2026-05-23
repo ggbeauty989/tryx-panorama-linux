@@ -1,8 +1,10 @@
 #include "devicemanager.h"
 #include <QDir>
 #include <QFileInfo>
+#include <cstring>
 #include <fstream>
 #include <filesystem>
+#include <iostream>
 
 // --- DeviceWorker ---
 
@@ -19,6 +21,7 @@ void DeviceWorker::connectDevice(const QString &port) {
     std::string portStr;
 
     if (port.isEmpty()) {
+        std::cerr << "[device] Auto-detecting TRYX device...\n";
         auto detected = panorama::Device::find_device();
         if (!detected) {
             // Disambiguate "no device" vs "device present but unreadable":
@@ -26,9 +29,15 @@ void DeviceWorker::connectDevice(const QString &port) {
             // and the generic message sends users on a wild goose chase.
             QStringList candidates = QDir("/dev").entryList(
                 QStringList{"ttyACM*"}, QDir::System);
+            if (!candidates.isEmpty()) {
+                std::cerr << "[device] Found " << candidates.size()
+                          << " ttyACM device(s) but cannot access any.\n";
+            }
             for (const QString &name : candidates) {
                 QFileInfo fi("/dev/" + name);
                 if (fi.exists() && (!fi.isReadable() || !fi.isWritable())) {
+                    std::cerr << "[device] PERMISSION DENIED: /dev/" << name.toStdString()
+                              << " - Run: sudo usermod -aG dialout $USER\n";
                     emit error(QString(
                         "No permission to open /dev/%1. "
                         "Add yourself to the 'dialout' group "
@@ -37,9 +46,11 @@ void DeviceWorker::connectDevice(const QString &port) {
                     return;
                 }
             }
+            std::cerr << "[device] No TRYX device detected.\n";
             emit error("Device not found. Check the USB connection.");
             return;
         }
+        std::cerr << "[device] Found TRYX device at " << detected->c_str() << "\n";
         portStr = *detected;
     } else {
         portStr = port.toStdString();
@@ -251,6 +262,60 @@ void DeviceWorker::setScreenConfig(const QStringList &media, const QString &rati
                     }
                 }
                 pclose(pipe);
+            }
+
+            // lspci returns the verbose form, e.g.
+            //   "Advanced Micro Devices, Inc. [AMD/ATI] Navi 48 [Radeon RX 9070/9070 XT/9070 GRE] (rev c0)"
+            // The Tryx badge has limited width, so collapse to a short form
+            // ("AMD Radeon RX 9070").
+
+            auto rev = gpuName.find(" (rev");
+            if (rev != std::string::npos) gpuName.erase(rev);
+
+            struct { const char* prefix; const char* tag; } vendors[] = {
+                {"Advanced Micro Devices, Inc.", "AMD"},
+                {"NVIDIA Corporation",           "NVIDIA"},
+                {"Intel Corporation",            "Intel"},
+            };
+            std::string vendor;
+            for (auto& v : vendors) {
+                size_t plen = std::strlen(v.prefix);
+                if (gpuName.compare(0, plen, v.prefix) == 0) {
+                    vendor = v.tag;
+                    gpuName.erase(0, plen);
+                    break;
+                }
+            }
+            while (!gpuName.empty() && gpuName.front() == ' ') gpuName.erase(0, 1);
+
+            // Strip an initial vendor-tag bracket like "[AMD/ATI]"
+            if (!gpuName.empty() && gpuName.front() == '[') {
+                auto close = gpuName.find(']');
+                if (close != std::string::npos) {
+                    gpuName.erase(0, close + 1);
+                    while (!gpuName.empty() && gpuName.front() == ' ') gpuName.erase(0, 1);
+                }
+            }
+
+            // If a [Model …] bracket remains (after the architecture codename),
+            // it carries the marketing name — prefer that
+            auto open = gpuName.find('[');
+            if (open != std::string::npos) {
+                auto close = gpuName.find(']', open);
+                if (close != std::string::npos) {
+                    gpuName = gpuName.substr(open + 1, close - open - 1);
+                }
+            }
+
+            // Collapse variant lists ("9070/9070 XT/9070 GRE" -> "9070")
+            auto slash = gpuName.find('/');
+            if (slash != std::string::npos) {
+                gpuName = gpuName.substr(0, slash);
+                while (!gpuName.empty() && gpuName.back() == ' ') gpuName.pop_back();
+            }
+
+            if (!vendor.empty() && !gpuName.empty()) {
+                gpuName = vendor + " " + gpuName;
             }
         }
     }

@@ -92,7 +92,7 @@ void SplitConfigWidget::setupUi() {
 
     // Left metrics button
     leftMetricsBtn_ = new QToolButton;
-    leftMetricsBtn_->setText(QString::fromUtf8("Left: 0 / 3 \u25BC"));
+    leftMetricsBtn_->setText(QString::fromUtf8("Left: 0 / %1 \u25BC").arg(MAX_METRICS));
     leftMetricsBtn_->setPopupMode(QToolButton::InstantPopup);
     leftMetricsBtn_->setStyleSheet(
         "QToolButton { background: #2a2a3e; color: #fff; border: 1px solid #4a4a5e; "
@@ -116,7 +116,7 @@ void SplitConfigWidget::setupUi() {
             for (auto *c : leftMetricCheckboxes_) {
                 if (c->isChecked()) count++;
             }
-            if (count > 3) {
+            if (count > MAX_METRICS) {
                 auto *sender = qobject_cast<QCheckBox *>(QObject::sender());
                 if (sender) sender->setChecked(false);
                 return;
@@ -129,7 +129,7 @@ void SplitConfigWidget::setupUi() {
 
     // Right metrics button
     rightMetricsBtn_ = new QToolButton;
-    rightMetricsBtn_->setText(QString::fromUtf8("Right: 0 / 3 \u25BC"));
+    rightMetricsBtn_->setText(QString::fromUtf8("Right: 0 / %1 \u25BC").arg(MAX_METRICS));
     rightMetricsBtn_->setPopupMode(QToolButton::InstantPopup);
     rightMetricsBtn_->setStyleSheet(
         "QToolButton { background: #2a2a3e; color: #fff; border: 1px solid #4a4a5e; "
@@ -153,7 +153,7 @@ void SplitConfigWidget::setupUi() {
             for (auto *c : rightMetricCheckboxes_) {
                 if (c->isChecked()) count++;
             }
-            if (count > 3) {
+            if (count > MAX_METRICS) {
                 auto *sender = qobject_cast<QCheckBox *>(QObject::sender());
                 if (sender) sender->setChecked(false);
                 return;
@@ -173,7 +173,7 @@ void SplitConfigWidget::rebuildMetricsButtonCb(QToolButton *btn, const QList<QCh
     for (auto *c : checkboxes) {
         if (c->isChecked()) count++;
     }
-    btn->setText(QString::fromUtf8("%1: %2 / 3 \u25BC").arg(side).arg(count));
+    btn->setText(QString::fromUtf8("%1: %2 / %3 \u25BC").arg(side).arg(count).arg(MAX_METRICS));
 }
 
 QStringList SplitConfigWidget::leftMedia() const {

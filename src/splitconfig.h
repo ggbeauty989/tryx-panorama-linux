@@ -11,6 +11,10 @@
 #include <QPixmap>
 #include <QStringList>
 
+// Maximum number of system metrics that can be displayed simultaneously
+// (firmware limit — sending more makes the device screen go black)
+static constexpr int MAX_METRICS = 3;
+
 class SplitConfigWidget : public QWidget {
     Q_OBJECT
 public:

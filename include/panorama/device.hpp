@@ -32,7 +32,7 @@ struct ScreenConfig {
   std::string screen_mode = "Full Screen";
   std::string ratio = "2:1";
   std::string play_mode = "Single";
-  std::vector<std::string> sysinfo_display; // max 3 labels
+  std::vector<std::string> sysinfo_display; // max MAX_METRICS labels (firmware-capped at 3)
   DisplaySettings settings;
 
   // For Screen Splitting mode
