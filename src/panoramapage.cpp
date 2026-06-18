@@ -15,6 +15,7 @@
 #include <QMessageBox>
 #include <QDir>
 #include <QFileInfo>
+#include <QApplication>
 #include <QCoreApplication>
 #include <QProcess>
 #include <QPixmap>
@@ -51,6 +52,9 @@ PanoramaPage::PanoramaPage(DeviceManager *deviceMgr, QWidget *parent)
     restorePageState();
 
     connect(metricsTimer_, &QTimer::timeout, this, &PanoramaPage::onSendMetrics);
+
+    // Persist UI state when the application exits (e.g. systemd SIGTERM on reboot)
+    connect(qApp, &QApplication::aboutToQuit, this, &PanoramaPage::savePageState);
 
     // Device signals
     connect(deviceMgr_, &DeviceManager::mediaListUpdated, this, &PanoramaPage::onMediaListUpdated);
@@ -828,14 +832,16 @@ void PanoramaPage::savePageState() {
         settings.remove("preset/selectedName");
     }
 
-    // Save checked metrics
+    // Save checked metrics as a comma-separated string — Qt 6 IniFormat joins
+    // QStringList with ", " on write but reads it back as a plain QString, so
+    // toStringList() returns a single-element list and contains() always fails.
     QStringList checkedMetrics;
     for (const auto &opt : metricOptions_) {
         if (opt.checkbox->isChecked()) {
             checkedMetrics << opt.label;
         }
     }
-    settings.setValue("metrics/checked", checkedMetrics);
+    settings.setValue("metrics/checked", checkedMetrics.join(","));
 
     // Save display settings (Pre-set tab)
     settings.setValue("display/position", positionCombo_->currentText());
@@ -851,12 +857,14 @@ void PanoramaPage::savePageState() {
     settings.setValue("custom/cpuBadge", customCpuBadge_->isChecked());
     settings.setValue("custom/gpuBadge", customGpuBadge_->isChecked());
 
-    // Save selected custom metrics so they persist across sessions
+    // Save selected custom metrics (same comma-only encoding as metrics/checked)
     QStringList customChecked;
     for (auto *cb : customMetricCheckboxes_) {
         if (cb->isChecked()) customChecked << cb->property("metricLabel").toString();
     }
-    settings.setValue("custom/metrics", customChecked);
+    settings.setValue("custom/metrics", customChecked.join(","));
+
+    settings.sync();
 }
 
 void PanoramaPage::restorePageState() {
@@ -875,8 +883,11 @@ void PanoramaPage::restorePageState() {
         }
     }
 
-    // Restore checked metrics
-    QStringList checkedMetrics = settings.value("metrics/checked").toStringList();
+    // Restore checked metrics — split the comma-separated string and trim each
+    // entry so both old files ("CPU Usage") and new files (" CPU Usage") match.
+    QStringList checkedMetrics;
+    for (const QString &s : settings.value("metrics/checked").toString().split(","))
+        if (const QString t = s.trimmed(); !t.isEmpty()) checkedMetrics << t;
     if (!checkedMetrics.isEmpty()) {
         for (auto &opt : metricOptions_) {
             opt.checkbox->setChecked(checkedMetrics.contains(opt.label));
@@ -930,7 +941,10 @@ void PanoramaPage::restorePageState() {
     if (settings.contains("custom/gpuBadge")) {
         customGpuBadge_->setChecked(settings.value("custom/gpuBadge").toBool());
     }
-    QStringList customChecked = settings.value("custom/metrics").toStringList();
+    // Same comma-split-and-trim pattern as metrics/checked above
+    QStringList customChecked;
+    for (const QString &s : settings.value("custom/metrics").toString().split(","))
+        if (const QString t = s.trimmed(); !t.isEmpty()) customChecked << t;
     if (!customChecked.isEmpty()) {
         for (auto *cb : customMetricCheckboxes_) {
             QString lbl = cb->property("metricLabel").toString();
