@@ -162,13 +162,12 @@ void MainWindow::setupConnections() {
                 deviceMgr_->startKeepalive(settingsPage_->keepaliveInterval());
                 deviceMgr_->refreshMediaList();
 
-                // The cooler firmware remembers the last screen layout, so we
-                // don't have to resend the config — but the live values come
-                // from periodic POST all packets, which only flow while the
-                // metricsTimer is running. Resume it now (no-op if nothing
-                // is selected) so the display isn't frozen until the user
-                // hits Save manually.
-                panoramaPage_->startMetrics();
+                // Re-apply the screen layout so the firmware knows what to
+                // display after a power cycle (it may not retain state across
+                // reboots). Start metrics after a short delay to let the
+                // config settle on the device first.
+                panoramaPage_->applyScreenConfig();
+                QTimer::singleShot(2000, this, [this]() { panoramaPage_->startMetrics(); });
             });
 
     connect(deviceMgr_, &DeviceManager::deviceDisconnected, this, [this]() {
