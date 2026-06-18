@@ -45,6 +45,7 @@ public slots:
     void sendKeepalive();
     void sendSysinfo(const QStringList &labels, const QStringList &values,
                      const QStringList &units);
+    void sendSysinfoDisplay(const QStringList &labels);
 
 signals:
     void connected(const QString &productId, const QString &serial,
@@ -96,6 +97,7 @@ public slots:
     void refreshMediaList();
     void sendSysinfo(const QStringList &labels, const QStringList &values,
                      const QStringList &units);
+    void sendSysinfoDisplay(const QStringList &labels);
     void startKeepalive(int intervalSec = 10);
     void stopKeepalive();
 
@@ -136,6 +138,7 @@ signals:
     void requestKeepalive();
     void requestSysinfo(const QStringList &labels, const QStringList &values,
                         const QStringList &units);
+    void requestSysinfoDisplay(const QStringList &labels);
 
 private:
     QThread workerThread_;

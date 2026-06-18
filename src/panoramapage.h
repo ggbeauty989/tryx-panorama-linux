@@ -50,7 +50,6 @@ signals:
 public slots:
     void startMetrics();
     void stopMetrics();
-    void applyScreenConfig();
 
 private slots:
     // Tab switching
@@ -88,6 +87,7 @@ private:
     void setupDisplaySettings();
     void loadBuiltinMedia();
     QPixmap extractThumbnail(const QString &videoPath, const QString &cachePath);
+    void applyScreenConfig();
     void savePageState();
     void restorePageState();
 

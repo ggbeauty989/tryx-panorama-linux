@@ -347,6 +347,16 @@ void DeviceWorker::sendSysinfo(const QStringList &labels, const QStringList &val
     emit sysinfoSent();
 }
 
+void DeviceWorker::sendSysinfoDisplay(const QStringList &labels) {
+    if (!device_ || !device_->is_connected()) return;
+
+    panorama::ScreenConfig config;
+    for (const auto &l : labels)
+        config.sysinfo_display.push_back(l.toStdString());
+
+    device_->set_sysinfo_display(config);
+}
+
 void DeviceWorker::deleteMedia(const QStringList &files) {
     std::vector<std::string> filenames;
     for (const auto &f : files) {
@@ -521,6 +531,7 @@ DeviceManager::DeviceManager(QObject *parent)
     connect(this, &DeviceManager::requestRotation, worker_, &DeviceWorker::setRotation);
     connect(this, &DeviceManager::requestReboot, worker_, &DeviceWorker::rebootDevice);
     connect(this, &DeviceManager::requestSysinfo, worker_, &DeviceWorker::sendSysinfo);
+    connect(this, &DeviceManager::requestSysinfoDisplay, worker_, &DeviceWorker::sendSysinfoDisplay);
     connect(worker_, &DeviceWorker::sysinfoSent, this, &DeviceManager::sysinfoSent);
 
     // Keepalive timer
@@ -572,6 +583,10 @@ void DeviceManager::setScreenConfig(const QStringList &media, const QString &rat
 void DeviceManager::sendSysinfo(const QStringList &labels, const QStringList &values,
                                 const QStringList &units) {
     emit requestSysinfo(labels, values, units);
+}
+
+void DeviceManager::sendSysinfoDisplay(const QStringList &labels) {
+    emit requestSysinfoDisplay(labels);
 }
 
 void DeviceManager::setRotation(int degrees) {

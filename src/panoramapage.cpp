@@ -1006,6 +1006,10 @@ void PanoramaPage::startMetrics() {
     if (metricsRunning_) return;
     if (activeMetricLabels().isEmpty()) return;
 
+    // Re-tell the firmware which items to display: after a power cycle it
+    // may still show the last video but forget the sysinfoDisplay config.
+    deviceMgr_->sendSysinfoDisplay(activeMetricLabels());
+
     metricsRunning_ = true;
     metricsTimer_->start(2000);
     emit metricsRunningChanged(true);
