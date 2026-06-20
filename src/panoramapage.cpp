@@ -735,16 +735,15 @@ void PanoramaPage::onChooseCustomTextColor() {
 }
 
 void PanoramaPage::applyScreenConfig() {
-    QStringList labels;
-    for (const auto &opt : metricOptions_) {
-        if (opt.checkbox->isChecked()) {
-            labels << opt.label;
-        }
-    }
+    if (!selectedPresetTile_) return;
 
+    QStringList labels = activeMetricLabels();
+
+    // Badge state from either tab — the user may configure badges via the
+    // Customization tab while using a Pre-set for the video.
     QStringList badges;
-    if (cbCpuBadge_->isChecked()) badges << "CPU Badge";
-    if (cbGpuBadge_->isChecked()) badges << "GPU Badge";
+    if (cbCpuBadge_->isChecked() || customCpuBadge_->isChecked()) badges << "CPU Badge";
+    if (cbGpuBadge_->isChecked() || customGpuBadge_->isChecked()) badges << "GPU Badge";
 
     // Get selected media from preset tile, using device preset ID if available
     QStringList media;
@@ -1006,10 +1005,6 @@ void PanoramaPage::startMetrics() {
     if (metricsRunning_) return;
     if (activeMetricLabels().isEmpty()) return;
 
-    // Re-tell the firmware which items to display: after a power cycle it
-    // may still show the last video but forget the sysinfoDisplay config.
-    deviceMgr_->sendSysinfoDisplay(activeMetricLabels());
-
     metricsRunning_ = true;
     metricsTimer_->start(2000);
     emit metricsRunningChanged(true);
@@ -1027,6 +1022,15 @@ void PanoramaPage::stopMetrics() {
     emit metricsRunningChanged(false);
     metricsStatusLabel_->setText("");
     metricsStatusLabel_->setStyleSheet("color: #888;");
+}
+
+void PanoramaPage::restoreDisplayOnConnect() {
+    // Re-send the last saved screen config so the firmware shows the correct
+    // display after any USB reconnect or power cycle. applyScreenConfig()
+    // skips silently when no Pre-set tile is selected. After the config
+    // settles on the device, resume live-metric delivery.
+    applyScreenConfig();
+    QTimer::singleShot(2000, this, [this]() { startMetrics(); });
 }
 
 void PanoramaPage::onSendMetrics() {

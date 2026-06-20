@@ -50,6 +50,7 @@ signals:
 public slots:
     void startMetrics();
     void stopMetrics();
+    void restoreDisplayOnConnect();
 
 private slots:
     // Tab switching

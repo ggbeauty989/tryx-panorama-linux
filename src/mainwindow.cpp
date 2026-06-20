@@ -162,18 +162,17 @@ void MainWindow::setupConnections() {
                 deviceMgr_->startKeepalive(settingsPage_->keepaliveInterval());
                 deviceMgr_->refreshMediaList();
 
-                // The cooler firmware remembers the last screen layout, so we
-                // don't have to resend the config — but the live values come
-                // from periodic POST all packets, which only flow while the
-                // metricsTimer is running. Resume it now (no-op if nothing
-                // is selected) so the display isn't frozen until the user
-                // hits Save manually.
-                panoramaPage_->startMetrics();
+                // Re-send the saved screen config (video preset + badges +
+                // metrics) so the display is correct after any USB reconnect
+                // or power cycle. startMetrics() is called internally after a
+                // 2-second settle delay.
+                panoramaPage_->restoreDisplayOnConnect();
             });
 
     connect(deviceMgr_, &DeviceManager::deviceDisconnected, this, [this]() {
         statusLabel_->setText("Disconnected");
         trayMgr_->setConnected(false);
+        panoramaPage_->stopMetrics();
     });
 
     connect(deviceMgr_, &DeviceManager::deviceError, this, [this](const QString &msg) {
