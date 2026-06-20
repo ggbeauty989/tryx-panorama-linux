@@ -88,7 +88,7 @@ private:
     void setupDisplaySettings();
     void loadBuiltinMedia();
     QPixmap extractThumbnail(const QString &videoPath, const QString &cachePath);
-    void applyScreenConfig();
+    void applyScreenConfig(bool skipUpload = false);
     void savePageState();
     void restorePageState();
 

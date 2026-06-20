@@ -734,8 +734,11 @@ void PanoramaPage::onChooseCustomTextColor() {
     }
 }
 
-void PanoramaPage::applyScreenConfig() {
-    if (!selectedPresetTile_) return;
+void PanoramaPage::applyScreenConfig(bool skipUpload) {
+    if (!selectedPresetTile_) {
+        fprintf(stderr, "[panorama] applyScreenConfig: no preset tile selected, skipping\n");
+        return;
+    }
 
     QStringList labels = activeMetricLabels();
 
@@ -748,57 +751,57 @@ void PanoramaPage::applyScreenConfig() {
     // Get selected media from preset tile, using device preset ID if available
     QStringList media;
     QString presetId;
-    if (selectedPresetTile_) {
+    {
         QFileInfo fi(selectedPresetTile_->filePath());
         QString baseName = fi.completeBaseName();
         presetId = presetIdForName(baseName);
         if (presetId.isEmpty()) {
-            // Non-preset file: upload to device via ADB first, then set config
-            QString localPath = selectedPresetTile_->filePath();
             QString remoteName = fi.fileName();
             media << remoteName;
 
-            fprintf(stderr, "[panorama] uploading '%s' to device...\n",
+            if (!skipUpload) {
+                // Non-preset file: upload to device via ADB first, then set config
+                fprintf(stderr, "[panorama] uploading '%s' to device...\n",
+                        remoteName.toStdString().c_str());
+                emit statusMessage("Uploading " + remoteName + "...");
+
+                auto conn = std::make_shared<QMetaObject::Connection>();
+                auto errConn = std::make_shared<QMetaObject::Connection>();
+                *conn = connect(deviceMgr_, &DeviceManager::mediaUploaded, this,
+                    [this, labels, badges, conn, errConn](const QString &uploadedName) {
+                        disconnect(*conn);
+                        disconnect(*errConn);
+                        QStringList actualMedia;
+                        actualMedia << uploadedName;
+                        fprintf(stderr, "[panorama] upload done: '%s', setting screen config\n",
+                                uploadedName.toStdString().c_str());
+                        deviceMgr_->setScreenConfig(
+                            actualMedia,
+                            ratioCombo_ ? ratioCombo_->currentText() : "2:1",
+                            "Full Screen", "Single", labels,
+                            positionCombo_->currentText(),
+                            textColor_.name(),
+                            alignCombo_->currentText(),
+                            badges, 0, QString()
+                        );
+                        emit statusMessage("Configuration applied");
+                    });
+
+                *errConn = connect(deviceMgr_, &DeviceManager::deviceError, this,
+                    [this, conn, errConn](const QString &msg) {
+                        disconnect(*conn);
+                        disconnect(*errConn);
+                        fprintf(stderr, "[panorama] upload failed: %s\n",
+                                msg.toStdString().c_str());
+                        emit statusMessage("Upload failed: " + msg);
+                    });
+
+                deviceMgr_->uploadMedia(selectedPresetTile_->filePath());
+                return;  // Config will be set after upload completes
+            }
+            // skipUpload=true: file already on device, just send config with filename
+            fprintf(stderr, "[panorama] restore: using existing device file '%s'\n",
                     remoteName.toStdString().c_str());
-            emit statusMessage("Uploading " + remoteName + "...");
-
-            // Upload in background, set config after upload completes.
-            // Both connections are one-shot: whichever signal fires first
-            // disconnects the other so we don't leak callbacks across runs.
-            auto conn = std::make_shared<QMetaObject::Connection>();
-            auto errConn = std::make_shared<QMetaObject::Connection>();
-            *conn = connect(deviceMgr_, &DeviceManager::mediaUploaded, this,
-                [this, labels, badges, conn, errConn](const QString &uploadedName) {
-                    disconnect(*conn);
-                    disconnect(*errConn);
-                    // Use actual uploaded filename (may be converted to .mp4)
-                    QStringList actualMedia;
-                    actualMedia << uploadedName;
-                    fprintf(stderr, "[panorama] upload done: '%s', setting screen config\n",
-                            uploadedName.toStdString().c_str());
-                    deviceMgr_->setScreenConfig(
-                        actualMedia,
-                        ratioCombo_ ? ratioCombo_->currentText() : "2:1",
-                        "Full Screen", "Single", labels,
-                        positionCombo_->currentText(),
-                        textColor_.name(),
-                        alignCombo_->currentText(),
-                        badges, 0, QString()
-                    );
-                    emit statusMessage("Configuration applied");
-                });
-
-            *errConn = connect(deviceMgr_, &DeviceManager::deviceError, this,
-                [this, conn, errConn](const QString &msg) {
-                    disconnect(*conn);
-                    disconnect(*errConn);
-                    fprintf(stderr, "[panorama] upload failed: %s\n",
-                            msg.toStdString().c_str());
-                    emit statusMessage("Upload failed: " + msg);
-                });
-
-            deviceMgr_->uploadMedia(localPath);
-            return;  // Config will be set after upload completes
         }
     }
 
@@ -1003,7 +1006,9 @@ QStringList PanoramaPage::activeMetricLabels() const {
 
 void PanoramaPage::startMetrics() {
     if (metricsRunning_) return;
-    if (activeMetricLabels().isEmpty()) return;
+    QStringList active = activeMetricLabels();
+    fprintf(stderr, "[panorama] startMetrics: %lld label(s) active\n", (long long)active.size());
+    if (active.isEmpty()) return;
 
     metricsRunning_ = true;
     metricsTimer_->start(2000);
@@ -1025,11 +1030,12 @@ void PanoramaPage::stopMetrics() {
 }
 
 void PanoramaPage::restoreDisplayOnConnect() {
-    // Re-send the last saved screen config so the firmware shows the correct
-    // display after any USB reconnect or power cycle. applyScreenConfig()
-    // skips silently when no Pre-set tile is selected. After the config
-    // settles on the device, resume live-metric delivery.
-    applyScreenConfig();
+    fprintf(stderr, "[panorama] restoreDisplayOnConnect: preset=%s labels=%lld\n",
+            selectedPresetTile_ ? selectedPresetTile_->filePath().toStdString().c_str() : "(none)",
+            (long long)activeMetricLabels().size());
+    // Skip re-uploading the video: the file is already on the device from the
+    // last Save. We just need to resend the screen config and badge settings.
+    applyScreenConfig(/*skipUpload=*/true);
     QTimer::singleShot(2000, this, [this]() { startMetrics(); });
 }
 
