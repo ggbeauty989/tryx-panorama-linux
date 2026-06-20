@@ -760,7 +760,7 @@ void PanoramaPage::applyScreenConfig(bool skipUpload) {
             media << remoteName;
 
             if (!skipUpload) {
-                // Non-preset file: upload to device via ADB first, then set config
+                // Non-preset file: upload to device via ADB first, then set config.
                 fprintf(stderr, "[panorama] uploading '%s' to device...\n",
                         remoteName.toStdString().c_str());
                 emit statusMessage("Uploading " + remoteName + "...");
@@ -784,6 +784,8 @@ void PanoramaPage::applyScreenConfig(bool skipUpload) {
                             alignCombo_->currentText(),
                             badges, 0, QString()
                         );
+                        // Start live metrics after the config has settled.
+                        QTimer::singleShot(2000, this, [this]() { startMetrics(); });
                         emit statusMessage("Configuration applied");
                     });
 
@@ -799,7 +801,7 @@ void PanoramaPage::applyScreenConfig(bool skipUpload) {
                 deviceMgr_->uploadMedia(selectedPresetTile_->filePath());
                 return;  // Config will be set after upload completes
             }
-            // skipUpload=true: file already on device, just send config with filename
+            // skipUpload=true: file assumed already on device, send config directly.
             fprintf(stderr, "[panorama] restore: using existing device file '%s'\n",
                     remoteName.toStdString().c_str());
         }
@@ -1030,13 +1032,20 @@ void PanoramaPage::stopMetrics() {
 }
 
 void PanoramaPage::restoreDisplayOnConnect() {
-    fprintf(stderr, "[panorama] restoreDisplayOnConnect: preset=%s labels=%lld\n",
-            selectedPresetTile_ ? selectedPresetTile_->filePath().toStdString().c_str() : "(none)",
+    QString tilePath = selectedPresetTile_
+        ? selectedPresetTile_->filePath() : QString("(none)");
+    QString presetId = selectedPresetTile_
+        ? presetIdForName(QFileInfo(tilePath).completeBaseName()) : QString();
+    fprintf(stderr, "[panorama] restoreDisplayOnConnect: preset='%s' presetId='%s' labels=%lld\n",
+            tilePath.toStdString().c_str(), presetId.toStdString().c_str(),
             (long long)activeMetricLabels().size());
-    // Skip re-uploading the video: the file is already on the device from the
-    // last Save. We just need to resend the screen config and badge settings.
-    applyScreenConfig(/*skipUpload=*/true);
-    QTimer::singleShot(2000, this, [this]() { startMetrics(); });
+
+    // Always use the upload path for non-preset videos: the device may have
+    // lost the file after a firmware reset. The upload callback handles
+    // setScreenConfig + startMetrics. For built-in presets (no upload), we
+    // schedule startMetrics here as fallback — double call is safe.
+    applyScreenConfig(/*skipUpload=*/false);
+    QTimer::singleShot(2500, this, [this]() { startMetrics(); });
 }
 
 void PanoramaPage::onSendMetrics() {
@@ -1104,16 +1113,14 @@ void PanoramaPage::onSendMetrics() {
     values << "0";
     units << "C";
 
-    // Print debug for selected metrics only
-    for (const auto &opt : metricOptions_) {
-        if (opt.checkbox->isChecked()) {
-            int idx = labels.indexOf(opt.label);
-            if (idx >= 0) {
-                fprintf(stderr, "[sysinfo] %s = %s %s\n",
-                        labels[idx].toStdString().c_str(),
-                        values[idx].toStdString().c_str(),
-                        units[idx].toStdString().c_str());
-            }
+    // Debug: print all active metric values (from either tab)
+    for (const QString &active : activeMetricLabels()) {
+        int idx = labels.indexOf(active);
+        if (idx >= 0) {
+            fprintf(stderr, "[sysinfo] %s = %s %s\n",
+                    active.toStdString().c_str(),
+                    values[idx].toStdString().c_str(),
+                    units[idx].toStdString().c_str());
         }
     }
 
