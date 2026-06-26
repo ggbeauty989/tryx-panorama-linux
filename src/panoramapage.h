@@ -181,6 +181,9 @@ private:
     QCheckBox *cbSleepMode_;
     QCheckBox *cbMirrorMode_;
 
+    // Pending file selection — applied when fileList_ is populated after device connect
+    QStringList pendingFileSelection_;
+
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;

@@ -868,6 +868,25 @@ void PanoramaPage::savePageState() {
     }
     settings.setValue("custom/metrics", customChecked.join(","));
 
+    // Save screen mode, play mode, ratio
+    settings.setValue("custom/screenMode", fullScreenRadio_->isChecked() ? "full" : "split");
+    settings.setValue("custom/playMode", playModeCombo_->currentText());
+    settings.setValue("custom/ratio", ratioCombo_->currentText());
+
+    // Save selected files in the Customization tab file list
+    QStringList selectedFiles;
+    for (int i = 0; i < fileList_->count(); ++i) {
+        if (fileList_->item(i)->isSelected()) {
+            QString fn = fileList_->item(i)->data(Qt::UserRole).toString();
+            if (fn.isEmpty()) fn = fileList_->item(i)->text().section('\n', 0, 0);
+            selectedFiles << fn;
+        }
+    }
+    settings.setValue("custom/selectedFiles", selectedFiles.join(","));
+
+    // Save active tab
+    settings.setValue("ui/activeTab", tabBar_->currentIndex());
+
     settings.sync();
 }
 
@@ -959,6 +978,40 @@ void PanoramaPage::restorePageState() {
         for (auto *cb : customMetricCheckboxes_) if (cb->isChecked()) count++;
         if (customMetricsBtn_) {
             customMetricsBtn_->setText(QString::fromUtf8("%1 / %2 ▼").arg(count).arg(MAX_METRICS));
+        }
+    }
+
+    // Restore screen mode radio
+    if (settings.contains("custom/screenMode")) {
+        bool isFull = settings.value("custom/screenMode").toString() == "full";
+        fullScreenRadio_->setChecked(isFull);
+        splitScreenRadio_->setChecked(!isFull);
+        onScreenModeChanged();
+    }
+
+    // Restore play mode
+    if (settings.contains("custom/playMode")) {
+        int idx = playModeCombo_->findText(settings.value("custom/playMode").toString());
+        if (idx >= 0) playModeCombo_->setCurrentIndex(idx);
+    }
+
+    // Restore ratio
+    if (settings.contains("custom/ratio")) {
+        int idx = ratioCombo_->findText(settings.value("custom/ratio").toString());
+        if (idx >= 0) ratioCombo_->setCurrentIndex(idx);
+    }
+
+    // Store the pending file selection — applied in onMediaListUpdated() once the
+    // device sends its media list (fileList_ is empty until then).
+    pendingFileSelection_.clear();
+    for (const QString &s : settings.value("custom/selectedFiles").toString().split(","))
+        if (const QString t = s.trimmed(); !t.isEmpty()) pendingFileSelection_ << t;
+
+    // Restore active tab
+    if (settings.contains("ui/activeTab")) {
+        int tab = settings.value("ui/activeTab").toInt();
+        if (tab >= 0 && tab < tabBar_->count()) {
+            tabBar_->setCurrentIndex(tab);
         }
     }
 
@@ -1367,6 +1420,20 @@ void PanoramaPage::onMediaListUpdated(const QStringList &files) {
 
         fileList_->addItem(item);
     }
+
+    // Apply pending file selection restored from QSettings
+    if (!pendingFileSelection_.isEmpty()) {
+        for (int i = 0; i < fileList_->count(); ++i) {
+            auto *it = fileList_->item(i);
+            QString fn = it->data(Qt::UserRole).toString();
+            if (fn.isEmpty()) fn = it->text().section('\n', 0, 0);
+            if (pendingFileSelection_.contains(fn)) {
+                it->setSelected(true);
+            }
+        }
+        pendingFileSelection_.clear();
+    }
+
     emit statusMessage(QString("Files on device: %1").arg(files.size()));
 }
 
