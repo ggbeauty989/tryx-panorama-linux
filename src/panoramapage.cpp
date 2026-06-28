@@ -887,6 +887,10 @@ void PanoramaPage::savePageState() {
     // Save active tab
     settings.setValue("ui/activeTab", tabBar_->currentIndex());
 
+    // Save which tab last applied a config so restoreDisplayOnConnect() knows what to restore
+    if (!lastAppliedMode_.isEmpty())
+        settings.setValue("lastAppliedMode", lastAppliedMode_);
+
     settings.sync();
 }
 
@@ -1007,6 +1011,9 @@ void PanoramaPage::restorePageState() {
     for (const QString &s : settings.value("custom/selectedFiles").toString().split(","))
         if (const QString t = s.trimmed(); !t.isEmpty()) pendingFileSelection_ << t;
 
+    // Restore which mode last applied a config to the device
+    lastAppliedMode_ = settings.value("lastAppliedMode").toString();
+
     // Restore active tab
     if (settings.contains("ui/activeTab")) {
         int tab = settings.value("ui/activeTab").toInt();
@@ -1033,7 +1040,8 @@ void PanoramaPage::onPresetSave() {
         QTimer::singleShot(2000, this, [this]() { startMetrics(); });
     }
 
-    // Persist current page state
+    // Persist current page state — preset tab was the last to apply a config
+    lastAppliedMode_ = "preset";
     savePageState();
 
     emit statusMessage("Configuration applied");
@@ -1085,20 +1093,101 @@ void PanoramaPage::stopMetrics() {
 }
 
 void PanoramaPage::restoreDisplayOnConnect() {
-    QString tilePath = selectedPresetTile_
-        ? selectedPresetTile_->filePath() : QString("(none)");
-    QString presetId = selectedPresetTile_
-        ? presetIdForName(QFileInfo(tilePath).completeBaseName()) : QString();
-    fprintf(stderr, "[panorama] restoreDisplayOnConnect: preset='%s' presetId='%s' labels=%lld\n",
-            tilePath.toStdString().c_str(), presetId.toStdString().c_str(),
-            (long long)activeMetricLabels().size());
+    fprintf(stderr, "[panorama] restoreDisplayOnConnect: lastAppliedMode='%s'\n",
+            lastAppliedMode_.toStdString().c_str());
 
-    // Always use the upload path for non-preset videos: the device may have
-    // lost the file after a firmware reset. The upload callback handles
-    // setScreenConfig + startMetrics. For built-in presets (no upload), we
-    // schedule startMetrics here as fallback — double call is safe.
-    applyScreenConfig(/*skipUpload=*/false);
-    QTimer::singleShot(2500, this, [this]() { startMetrics(); });
+    if (lastAppliedMode_ == "preset") {
+        QString tilePath = selectedPresetTile_
+            ? selectedPresetTile_->filePath() : QString("(none)");
+        fprintf(stderr, "[panorama] restoreDisplayOnConnect: preset='%s'\n",
+                tilePath.toStdString().c_str());
+
+        // Always use the upload path for non-preset videos: the device may have
+        // lost the file after a firmware reset. The upload callback handles
+        // setScreenConfig + startMetrics. For built-in presets (no upload), we
+        // schedule startMetrics here as fallback — double call is safe.
+        applyScreenConfig(/*skipUpload=*/false);
+        QTimer::singleShot(2500, this, [this]() { startMetrics(); });
+
+    } else if (lastAppliedMode_ == "custom/full") {
+        QSettings settings("tryx-panorama", "PanoramaPage");
+        QStringList selectedFiles;
+        for (const QString &s : settings.value("custom/selectedFiles").toString().split(","))
+            if (const QString t = s.trimmed(); !t.isEmpty()) selectedFiles << t;
+
+        if (selectedFiles.isEmpty()) {
+            fprintf(stderr, "[panorama] restoreDisplayOnConnect: custom/full but no files saved\n");
+            return;
+        }
+
+        QString ratio    = settings.value("custom/ratio",    "2:1").toString();
+        QString playMode = settings.value("custom/playMode", "Single").toString();
+        QString position = settings.value("custom/position", "Top").toString();
+        QString textColor= settings.value("custom/textColor","#ffffff").toString();
+        QString align    = settings.value("custom/align",    "Left").toString();
+
+        QStringList metrics;
+        for (const QString &s : settings.value("custom/metrics").toString().split(","))
+            if (const QString t = s.trimmed(); !t.isEmpty()) metrics << t;
+
+        QStringList badges;
+        if (settings.value("custom/cpuBadge", false).toBool()) badges << "CPU Badge";
+        if (settings.value("custom/gpuBadge", false).toBool()) badges << "GPU Badge";
+
+        fprintf(stderr, "[panorama] restoreDisplayOnConnect: custom/full files='%s' metrics=%lld\n",
+                selectedFiles.join(",").toStdString().c_str(), (long long)metrics.size());
+
+        // Look up the local source path saved at upload time. If the device lost the
+        // file after a firmware reset, uploadMedia() will re-send it; if the file is
+        // already present on the device the ADB check inside uploadMedia() skips the
+        // actual transfer and just emits mediaUploaded immediately.
+        QString localPath;
+        if (selectedFiles.size() == 1) {
+            localPath = settings.value("uploadedFiles/" + selectedFiles.first()).toString();
+        }
+
+        if (!localPath.isEmpty() && QFileInfo::exists(localPath)) {
+            fprintf(stderr, "[panorama] restoreDisplayOnConnect: re-uploading '%s' from '%s'\n",
+                    selectedFiles.first().toStdString().c_str(),
+                    localPath.toStdString().c_str());
+
+            auto conn    = std::make_shared<QMetaObject::Connection>();
+            auto errConn = std::make_shared<QMetaObject::Connection>();
+
+            *conn = connect(deviceMgr_, &DeviceManager::mediaUploaded, this,
+                [this, selectedFiles, ratio, playMode, metrics, position, textColor,
+                 align, badges, conn, errConn](const QString &) {
+                    disconnect(*conn);
+                    disconnect(*errConn);
+                    deviceMgr_->setScreenConfig(selectedFiles, ratio, "Full Screen", playMode,
+                                                metrics, position, textColor, align, badges, 0);
+                    if (!metrics.isEmpty()) {
+                        QTimer::singleShot(2000, this, [this]() { startMetrics(); });
+                    }
+                });
+
+            *errConn = connect(deviceMgr_, &DeviceManager::deviceError, this,
+                [this, conn, errConn](const QString &msg) {
+                    disconnect(*conn);
+                    disconnect(*errConn);
+                    fprintf(stderr, "[panorama] restore: re-upload failed: %s\n",
+                            msg.toStdString().c_str());
+                });
+
+            deviceMgr_->uploadMedia(localPath);
+        } else {
+            // No local path recorded (file uploaded in a previous app version) —
+            // assume the file is still on the device and send config directly.
+            deviceMgr_->setScreenConfig(selectedFiles, ratio, "Full Screen", playMode,
+                                        metrics, position, textColor, align, badges, 0);
+            if (!metrics.isEmpty()) {
+                QTimer::singleShot(2000, this, [this]() { startMetrics(); });
+            }
+        }
+
+    } else {
+        fprintf(stderr, "[panorama] restoreDisplayOnConnect: no saved mode, leaving device as-is\n");
+    }
 }
 
 void PanoramaPage::onSendMetrics() {
@@ -1189,6 +1278,7 @@ void PanoramaPage::onUploadClicked() {
         "Media (*.mp4 *.webm *.mkv *.avi *.mov *.gif *.jpg *.jpeg *.png *.bmp *.webp)");
 
     if (!path.isEmpty()) {
+        pendingUploadLocalPath_ = path;
         progressBar_->setVisible(true);
         uploadBtn_->setEnabled(false);
         deviceMgr_->uploadMedia(path);
@@ -1300,6 +1390,8 @@ void PanoramaPage::onCustomSave() {
             QTimer::singleShot(2000, this, [this]() { startMetrics(); });
         }
 
+        // Customization/Full Screen was the last to apply a config
+        lastAppliedMode_ = "custom/full";
         savePageState();
         emit statusMessage("Full Screen configuration applied");
     }
@@ -1440,6 +1532,16 @@ void PanoramaPage::onMediaListUpdated(const QStringList &files) {
 void PanoramaPage::onMediaUploaded(const QString &filename) {
     progressBar_->setVisible(false);
     uploadBtn_->setEnabled(true);
+
+    // Persist the local→remote mapping so restoreDisplayOnConnect() can
+    // re-upload the file if the device loses it after a power cycle.
+    if (!pendingUploadLocalPath_.isEmpty()) {
+        QSettings settings("tryx-panorama", "PanoramaPage");
+        settings.setValue("uploadedFiles/" + filename, pendingUploadLocalPath_);
+        settings.sync();
+        pendingUploadLocalPath_.clear();
+    }
+
     emit statusMessage(QString("Uploaded: %1").arg(filename));
     deviceMgr_->refreshMediaList();
 }
@@ -1484,6 +1586,7 @@ void PanoramaPage::dropEvent(QDropEvent *event) {
 
     for (const auto &url : event->mimeData()->urls()) {
         if (url.isLocalFile()) {
+            pendingUploadLocalPath_ = url.toLocalFile();
             progressBar_->setVisible(true);
             uploadBtn_->setEnabled(false);
             deviceMgr_->uploadMedia(url.toLocalFile());

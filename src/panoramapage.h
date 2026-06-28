@@ -184,6 +184,12 @@ private:
     // Pending file selection — applied when fileList_ is populated after device connect
     QStringList pendingFileSelection_;
 
+    // Local path of the file currently being uploaded (cleared in onMediaUploaded)
+    QString pendingUploadLocalPath_;
+
+    // Tracks which tab last applied a config to the device ("preset", "custom/full", "")
+    QString lastAppliedMode_;
+
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
